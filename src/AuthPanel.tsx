@@ -11,7 +11,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   updateProfile,
   type User,
@@ -23,7 +24,10 @@ type Mode = 'login' | 'register'
 
 interface AuthContextValue {
   user: User | null
-  openPanel: () => void
+  ready: boolean
+  notice: string
+  setNotice: (message: string) => void
+  refresh: () => void
   signOutUser: () => Promise<void>
 }
 
@@ -31,8 +35,14 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 function useAuthContext(): AuthContextValue {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('AuthButton must be used inside <AuthProvider>')
+  if (!ctx) throw new Error('Auth components must be used inside <AuthProvider>')
   return ctx
+}
+
+function scrollToAccount() {
+  requestAnimationFrame(() => {
+    document.getElementById('account')?.scrollIntoView({ behavior: 'smooth' })
+  })
 }
 
 function friendlyError(error: unknown, fallback: string): string {
@@ -54,11 +64,10 @@ function friendlyError(error: unknown, fallback: string): string {
       return 'Please enter a valid email address.'
     case 'auth/too-many-requests':
       return 'Too many attempts. Please wait a moment and try again.'
-    case 'auth/popup-closed-by-user':
-    case 'auth/cancelled-popup-request':
-      return 'Google sign-in was cancelled.'
-    case 'auth/popup-blocked':
-      return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.'
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method.'
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not enabled. Enable it in Firebase Console > Authentication > Sign-in method.'
     case 'auth/unauthorized-domain':
       return 'This domain is not authorised in Firebase. Add it under Authentication > Settings > Authorized domains.'
     case 'auth/network-request-failed':
@@ -68,106 +77,34 @@ function friendlyError(error: unknown, fallback: string): string {
   }
 }
 
-/**
- * Holds all auth state in ONE place and renders the sign-in modal.
- * Place it inside the `.app` element (so the CSS variables apply) but
- * outside the header (so `position: fixed` is not trapped by the header's
- * backdrop-filter).
- */
+/** Holds all auth state in one place. Wrap the whole page with it. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [mode, setMode] = useState<Mode>('login')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [, setVersion] = useState(0)
 
   useEffect(() => {
-    if (!auth) return
+    if (!auth) {
+      setReady(true)
+      return
+    }
+
+    // Completes a Google sign-in after the browser returns from Google.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) scrollToAccount()
+      })
+      .catch((error) => {
+        setNotice(friendlyError(error, 'Google sign-in failed.'))
+        scrollToAccount()
+      })
 
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
-      if (nextUser) {
-        setOpen(false)
-        setPassword('')
-        setMessage('')
-      }
+      setReady(true)
     })
   }, [])
-
-  useEffect(() => {
-    if (!open) return
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open])
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (!auth) {
-      setMessage('Firebase is not configured.')
-      return
-    }
-
-    setLoading(true)
-    setMessage('')
-
-    try {
-      if (mode === 'register') {
-        const result = await createUserWithEmailAndPassword(auth, email, password)
-        if (name.trim()) {
-          await updateProfile(result.user, { displayName: name.trim() })
-        }
-      } else {
-        await signInWithEmailAndPassword(auth, email, password)
-      }
-      // onAuthStateChanged closes the modal on success.
-    } catch (error) {
-      setMessage(friendlyError(error, 'Something went wrong.'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleGoogle() {
-    if (!auth) {
-      setMessage('Firebase is not configured.')
-      return
-    }
-
-    setLoading(true)
-    setMessage('')
-
-    try {
-      // Popup works on every modern browser. signInWithRedirect breaks when
-      // the site is not on the same domain as Firebase's authDomain.
-      await signInWithPopup(auth, googleProvider)
-    } catch (error) {
-      setMessage(friendlyError(error, 'Google sign-in failed.'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleReset() {
-    if (!auth || !email.trim()) {
-      setMessage('Enter your email address first.')
-      return
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, email.trim())
-      setMessage('Password reset email sent.')
-    } catch (error) {
-      setMessage(friendlyError(error, 'Could not send reset email.'))
-    }
-  }
 
   async function signOutUser() {
     if (!auth) return
@@ -176,22 +113,130 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     user,
-    openPanel: () => setOpen(true),
+    ready,
+    notice,
+    setNotice,
+    // The Firebase user object is mutated in place (e.g. after updateProfile),
+    // so bump a counter to force a re-render.
+    refresh: () => setVersion((n) => n + 1),
     signOutUser,
   }
 
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+/** Header button: jumps to the account section, or signs out. No popups. */
+export function AuthButton({ onOpen }: { onOpen?: () => void }) {
+  const { user, signOutUser } = useAuthContext()
+
+  if (user) {
+    return (
+      <div className="auth-user">
+        <button type="button" onClick={signOutUser}>
+          Sign out
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <AuthContext.Provider value={value}>
-      {children}
+    <div className="auth-panel">
+      <a href="#account" onClick={onOpen}>
+        Sign in / Register
+      </a>
+    </div>
+  )
+}
 
-      {open && !user && (
-        <>
-          <div className="auth-overlay" onClick={() => setOpen(false)} />
+/** The sign-in / register form, shown inline on the page. */
+export function AuthSection() {
+  const { user, ready, notice, setNotice, refresh, signOutUser } = useAuthContext()
 
-          <div className="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-            <h2 id="auth-title">
-              {mode === 'login' ? 'Welcome back' : 'Create your account'}
-            </h2>
+  const [mode, setMode] = useState<Mode>('login')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!auth) {
+      setNotice('Firebase is not configured.')
+      return
+    }
+
+    setLoading(true)
+    setNotice('')
+
+    try {
+      if (mode === 'register') {
+        const result = await createUserWithEmailAndPassword(auth, email, password)
+        if (name.trim()) {
+          await updateProfile(result.user, { displayName: name.trim() })
+          refresh()
+        }
+      } else {
+        await signInWithEmailAndPassword(auth, email, password)
+      }
+      setPassword('')
+    } catch (error) {
+      setNotice(friendlyError(error, 'Something went wrong.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleGoogle() {
+    if (!auth) {
+      setNotice('Firebase is not configured.')
+      return
+    }
+
+    setLoading(true)
+    setNotice('')
+
+    try {
+      // Full-page redirect to Google (no popup window). The result is
+      // picked up by getRedirectResult in AuthProvider when the user returns.
+      await signInWithRedirect(auth, googleProvider)
+    } catch (error) {
+      setNotice(friendlyError(error, 'Google sign-in failed.'))
+      setLoading(false)
+    }
+  }
+
+  async function handleReset() {
+    if (!auth || !email.trim()) {
+      setNotice('Enter your email address first.')
+      return
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email.trim())
+      setNotice('Password reset email sent.')
+    } catch (error) {
+      setNotice(friendlyError(error, 'Could not send reset email.'))
+    }
+  }
+
+  return (
+    <section className="section-wrap section-block account-section" id="account">
+      <div className="section-kicker">06 — YOUR ACCOUNT</div>
+
+      <div className="account-card">
+        {!ready ? (
+          <p>Loading…</p>
+        ) : user ? (
+          <>
+            <h2>Welcome, {user.displayName || user.email}</h2>
+            <p>You are signed in.</p>
+            <button type="button" onClick={signOutUser}>
+              Sign out
+            </button>
+          </>
+        ) : (
+          <>
+            <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
 
             {!auth && (
               <p role="alert">
@@ -259,51 +304,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => {
                 setMode(mode === 'login' ? 'register' : 'login')
-                setMessage('')
+                setNotice('')
               }}
             >
               {mode === 'login'
                 ? 'Create an account'
                 : 'Already have an account? Sign in'}
             </button>
+          </>
+        )}
 
-            <button type="button" onClick={() => setOpen(false)}>
-              Close
-            </button>
-
-            {message && <p role="status">{message}</p>}
-          </div>
-        </>
-      )}
-    </AuthContext.Provider>
-  )
-}
-
-/** The header button. Safe to render in several places; they share one state. */
-export function AuthButton({ onOpen }: { onOpen?: () => void }) {
-  const { user, openPanel, signOutUser } = useAuthContext()
-
-  if (user) {
-    return (
-      <div className="auth-user">
-        <button type="button" onClick={signOutUser}>
-          Sign out
-        </button>
+        {notice && <p role="status">{notice}</p>}
       </div>
-    )
-  }
-
-  return (
-    <div className="auth-panel">
-      <button
-        type="button"
-        onClick={() => {
-          onOpen?.()
-          openPanel()
-        }}
-      >
-        Sign in / Register
-      </button>
-    </div>
+    </section>
   )
 }
