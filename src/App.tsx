@@ -120,8 +120,7 @@ function App() {
   const visibleSocials = SOCIALS.filter((s) => s.href)
 
   return (
-   return (
-  <div className={`app ${theme}`}>
+    <div className={`app ${theme}`}>
       <a className="skip-link" href="#main">Skip to content</a>
 
       <header className="header">
@@ -469,7 +468,6 @@ function App() {
           </div>
         </div>
       </footer>
-    
     </div>
   )
 }
