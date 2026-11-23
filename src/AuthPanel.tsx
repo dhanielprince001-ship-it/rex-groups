@@ -1,12 +1,17 @@
-
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
   updateProfile,
   type User,
@@ -14,9 +19,64 @@ import {
 
 import { auth, googleProvider } from './firebase'
 
-function AuthPanel() {
+type Mode = 'login' | 'register'
+
+interface AuthContextValue {
+  user: User | null
+  openPanel: () => void
+  signOutUser: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+function useAuthContext(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('AuthButton must be used inside <AuthProvider>')
+  return ctx
+}
+
+function friendlyError(error: unknown, fallback: string): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code: unknown }).code)
+      : ''
+
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Incorrect email or password.'
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Try signing in.'
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.'
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait a moment and try again.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Google sign-in was cancelled.'
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.'
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorised in Firebase. Add it under Authentication > Settings > Authorized domains.'
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.'
+    default:
+      return error instanceof Error ? error.message : fallback
+  }
+}
+
+/**
+ * Holds all auth state in ONE place and renders the sign-in modal.
+ * Place it inside the `.app` element (so the CSS variables apply) but
+ * outside the header (so `position: fixed` is not trapped by the header's
+ * backdrop-filter).
+ */
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,14 +87,26 @@ function AuthPanel() {
   useEffect(() => {
     if (!auth) return
 
-    const unsubscribe = onAuthStateChanged(auth, setUser)
-
-    getRedirectResult(auth).catch((error) => {
-      setMessage(error.message)
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser)
+      if (nextUser) {
+        setOpen(false)
+        setPassword('')
+        setMessage('')
+      }
     })
-
-    return unsubscribe
   }, [])
+
+  useEffect(() => {
+    if (!open) return
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -48,21 +120,16 @@ function AuthPanel() {
 
     try {
       if (mode === 'register') {
-        const result = await createUserWithEmailAndPassword(
-          auth, email, password
-        )
+        const result = await createUserWithEmailAndPassword(auth, email, password)
         if (name.trim()) {
-          await updateProfile(result.user, {
-            displayName: name.trim(),
-          })
+          await updateProfile(result.user, { displayName: name.trim() })
         }
-        setMessage('Account created successfully.')
       } else {
         await signInWithEmailAndPassword(auth, email, password)
-        setMessage('You are signed in.')
       }
+      // onAuthStateChanged closes the modal on success.
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Something went wrong.')
+      setMessage(friendlyError(error, 'Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -74,11 +141,16 @@ function AuthPanel() {
       return
     }
 
+    setLoading(true)
+    setMessage('')
+
     try {
-      setLoading(true)
-      await signInWithRedirect(auth, googleProvider)
+      // Popup works on every modern browser. signInWithRedirect breaks when
+      // the site is not on the same domain as Firebase's authDomain.
+      await signInWithPopup(auth, googleProvider)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Google sign-in failed.')
+      setMessage(friendlyError(error, 'Google sign-in failed.'))
+    } finally {
       setLoading(false)
     }
   }
@@ -90,150 +162,148 @@ function AuthPanel() {
     }
 
     try {
-      await sendPasswordResetEmail(auth, email)
+      await sendPasswordResetEmail(auth, email.trim())
       setMessage('Password reset email sent.')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not send reset email.')
+      setMessage(friendlyError(error, 'Could not send reset email.'))
     }
   }
 
-  async function handleLogout() {
+  async function signOutUser() {
     if (!auth) return
     await signOut(auth)
   }
 
+  const value: AuthContextValue = {
+    user,
+    openPanel: () => setOpen(true),
+    signOutUser,
+  }
+
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', zIndex: 1000 }}>
-      {user ? (
-        <button type="button" onClick={handleLogout}
-          style={buttonStyle}>
-          Sign out
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          style={buttonStyle}
-        >
-          {open ? 'Close' : 'Sign in / Register'}
-        </button>
-      )}
+    <AuthContext.Provider value={value}>
+      {children}
 
       {open && !user && (
-        <div style={panelStyle}>
-          <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+        <>
+          <div className="auth-overlay" onClick={() => setOpen(false)} />
 
-          <form onSubmit={handleSubmit}>
-            {mode === 'register' && (
-              <label style={labelStyle}>
-                Full name
-                <input style={inputStyle} value={name}
-                  onChange={e => setName(e.target.value)} required />
-              </label>
+          <div className="auth-box" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <h2 id="auth-title">
+              {mode === 'login' ? 'Welcome back' : 'Create your account'}
+            </h2>
+
+            {!auth && (
+              <p role="alert">
+                Sign-in is not available yet: the Firebase environment
+                variables are missing.
+              </p>
             )}
 
-            <label style={labelStyle}>
-              Email address
-              <input style={inputStyle} type="email" value={email}
-                onChange={e => setEmail(e.target.value)} required />
-            </label>
+            <form onSubmit={handleSubmit}>
+              {mode === 'register' && (
+                <label>
+                  Full name
+                  <input
+                    value={name}
+                    autoComplete="name"
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </label>
+              )}
 
-            <label style={labelStyle}>
-              Password
-              <input style={inputStyle} type="password" value={password}
-                onChange={e => setPassword(e.target.value)}
-                minLength={6} required />
-            </label>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={email}
+                  autoComplete="email"
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </label>
 
-            <button style={actionStyle} type="submit" disabled={loading}>
-              {loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={6}
+                  required
+                />
+              </label>
+
+              <button type="submit" disabled={loading}>
+                {loading
+                  ? 'Please wait...'
+                  : mode === 'login'
+                    ? 'Sign in'
+                    : 'Create account'}
+              </button>
+            </form>
+
+            {mode === 'login' && (
+              <button type="button" onClick={handleReset}>
+                Forgot password?
+              </button>
+            )}
+
+            <button type="button" onClick={handleGoogle} disabled={loading}>
+              Continue with Google
             </button>
-          </form>
 
-          {mode === 'login' && (
-            <button style={secondaryStyle} type="button" onClick={handleReset}>
-              Forgot password?
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === 'login' ? 'register' : 'login')
+                setMessage('')
+              }}
+            >
+              {mode === 'login'
+                ? 'Create an account'
+                : 'Already have an account? Sign in'}
             </button>
-          )}
 
-          <button style={secondaryStyle} type="button"
-            onClick={handleGoogle} disabled={loading}>
-            Continue with Google
-          </button>
+            <button type="button" onClick={() => setOpen(false)}>
+              Close
+            </button>
 
-          <button style={secondaryStyle} type="button"
-            onClick={() => {
-              setMode(mode === 'login' ? 'register' : 'login')
-              setMessage('')
-            }}>
-            {mode === 'login' ? 'Create an account' : 'Already have an account? Sign in'}
-          </button>
-
-          {message && <p role="status">{message}</p>}
-        </div>
+            {message && <p role="status">{message}</p>}
+          </div>
+        </>
       )}
-    </div>
+    </AuthContext.Provider>
   )
 }
 
-const buttonStyle = {
-  background: '#b6f34a',
-  color: '#101010',
-  border: 'none',
-  borderRadius: '8px',
-  padding: '12px 16px',
-  fontWeight: 700,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap' as const,
-}
+/** The header button. Safe to render in several places; they share one state. */
+export function AuthButton({ onOpen }: { onOpen?: () => void }) {
+  const { user, openPanel, signOutUser } = useAuthContext()
 
-const panelStyle = {
-  position: 'absolute' as const,
-  top: 'calc(100% + 12px)',
-  right: 0,
-  width: 'min(320px, calc(100vw - 32px))',
-  padding: '22px',
-  borderRadius: '14px',
-  background: '#171717',
-  color: '#ffffff',
-  border: '1px solid #444',
-  boxShadow: '0 12px 35px rgba(0,0,0,.35)',
-}
+  if (user) {
+    return (
+      <div className="auth-user">
+        <button type="button" onClick={signOutUser}>
+          Sign out
+        </button>
+      </div>
+    )
+  }
 
-const labelStyle = {
-  display: 'block',
-  marginBottom: '12px',
-  fontSize: '14px',
+  return (
+    <div className="auth-panel">
+      <button
+        type="button"
+        onClick={() => {
+          onOpen?.()
+          openPanel()
+        }}
+      >
+        Sign in / Register
+      </button>
+    </div>
+  )
 }
-
-const inputStyle = {
-  display: 'block',
-  boxSizing: 'border-box' as const,
-  width: '100%',
-  padding: '11px',
-  marginTop: '6px',
-  borderRadius: '7px',
-  border: '1px solid #555',
-  background: '#252525',
-  color: '#fff',
-}
-
-const actionStyle = {
-  ...buttonStyle,
-  width: '100%',
-  marginTop: '8px',
-}
-
-const secondaryStyle = {
-  display: 'block',
-  width: '100%',
-  marginTop: '10px',
-  padding: '9px',
-  border: '1px solid #555',
-  borderRadius: '7px',
-  background: 'transparent',
-  color: '#fff',
-  cursor: 'pointer',
-}
-
-export default AuthPanel
