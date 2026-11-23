@@ -18,3 +18,51 @@ html[data-theme=dark]{background:#0b0d10;color-scheme:dark}html[data-theme=light
 .app a:focus-visible,.app button:focus-visible,.app input:focus-visible,.app textarea:focus-visible{outline:2px solid var(--accentInk);outline-offset:3px}
 .contact-form input:focus-visible,.contact-form textarea:focus-visible{outline-offset:0}
 @media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}.button-primary:hover{transform:none}}
+
+
+/* REX GROUPS AUTHENTICATION BUTTON */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.auth-panel {
+  display: inline-flex !important;
+  position: relative;
+  align-items: center;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1000;
+}
+
+.auth-panel > button,
+.auth-panel > .auth-open {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.header {
+  overflow: visible;
+}
+
+@media (max-width: 900px) {
+  .header-actions {
+    gap: 8px;
+  }
+
+  .auth-panel {
+    display: inline-flex !important;
+  }
+
+  .auth-panel > button {
+    padding: 9px 10px !important;
+    font-size: 11px;
+  }
+}
+
