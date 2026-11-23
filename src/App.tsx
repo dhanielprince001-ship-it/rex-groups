@@ -1,3 +1,4 @@
+
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight, ArrowUpRight, Menu, X, Sun, Moon, Code2, ShoppingBag,
@@ -6,15 +7,10 @@ import {
 
 import AuthPanel from './AuthPanel'
 
-/* ------------------------------------------------------------------ */
-/* Site configuration — edit these in one place                        */
-/* ------------------------------------------------------------------ */
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
 const PHONE_DISPLAY = '+234 803 356 4331'
 
-// Add your real profile URLs here. Icons with an empty URL are not shown,
-// so visitors never land on a generic homepage by mistake.
 const SOCIALS = [
   { label: 'LinkedIn', href: '', icon: Linkedin },
   { label: 'Instagram', href: '', icon: Instagram },
@@ -55,8 +51,13 @@ function getInitialTheme(): Theme {
   try {
     const saved = localStorage.getItem('rex-theme')
     if (saved === 'dark' || saved === 'light') return saved
-  } catch { /* storage unavailable (private mode etc.) */ }
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  } catch {
+    // Storage unavailable
+  }
+
+  return window.matchMedia?.('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark'
 }
 
 function App() {
@@ -66,21 +67,33 @@ function App() {
 
   const closeMenu = () => setMenuOpen(false)
 
-  // Apply theme to <html> (fixes white overscroll flash) and remember it
   useEffect(() => {
     document.documentElement.dataset.theme = theme
+
     document.querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', theme === 'dark' ? '#0b0d10' : '#f5f6f3')
-    try { localStorage.setItem('rex-theme', theme) } catch { /* ignore */ }
+
+    try {
+      localStorage.setItem('rex-theme', theme)
+    } catch {
+      // Ignore storage errors
+    }
   }, [theme])
 
-  // Close the mobile menu with Escape, or when the screen grows to desktop size
   useEffect(() => {
     if (!menuOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
-    const onResize = () => { if (window.innerWidth > 900) setMenuOpen(false) }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+
+    const onResize = () => {
+      if (window.innerWidth > 900) setMenuOpen(false)
+    }
+
     window.addEventListener('keydown', onKey)
     window.addEventListener('resize', onResize)
+
     return () => {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', onResize)
@@ -89,13 +102,17 @@ function App() {
 
   function handleContact(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+
     const data = new FormData(e.currentTarget)
     const field = (key: string) => String(data.get(key) ?? '').trim()
+
     const name = field('name')
     const subject = encodeURIComponent(`Project enquiry from ${name}`)
+
     const body = encodeURIComponent(
       `Name: ${name}\nEmail: ${field('email')}\nBusiness: ${field('business') || '—'}\n\nProject details:\n${field('message')}`,
     )
+
     window.location.href = `mailto:${EMAIL}?subject=${subject}&body=${body}`
     setSent(true)
   }
@@ -109,29 +126,59 @@ function App() {
       <header className="header">
         <a className="brand" href="#home" onClick={closeMenu}>
           <span className="brand-mark">R<span>.</span></span>
-          <span className="brand-name">REX GROUPS<small>TECHNOLOGY · BUSINESS · INNOVATION</small></span>
+          <span className="brand-name">
+            REX GROUPS
+            <small>TECHNOLOGY · BUSINESS · INNOVATION</small>
+          </span>
         </a>
-        <nav id="site-nav" aria-label="Main" className={menuOpen ? 'nav open' : 'nav'}>
-          {NAV_LINKS.map(({ label, href }) => <a key={label} href={href} onClick={closeMenu}>{label}</a>)}
-          <a className="nav-cta" href="#contact" onClick={closeMenu}>Let's talk <ArrowUpRight size={15} aria-hidden="true" /></a>
+
+        <nav
+          id="site-nav"
+          aria-label="Main"
+          className={menuOpen ? 'nav open' : 'nav'}
+        >
+          {NAV_LINKS.map(({ label, href }) => (
+            <a key={label} href={href} onClick={closeMenu}>
+              {label}
+            </a>
+          ))}
+
+          <a className="nav-cta" href="#contact" onClick={closeMenu}>
+            Let's talk <ArrowUpRight size={15} aria-hidden="true" />
+          </a>
+
+          <div className="mobile-auth">
+            <AuthPanel />
+          </div>
         </nav>
-        <div className="mobile-auth">
-  <AuthPanel />
-</div>
+
         <div className="header-actions">
+          <div className="desktop-auth">
+            <AuthPanel />
+          </div>
 
-            <div className="desktop-auth">
+          <button
+            type="button"
+            className="icon-btn theme-btn"
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark'
+              ? <Sun size={18} aria-hidden="true" />
+              : <Moon size={18} aria-hidden="true" />}
+          </button>
 
-    <AuthPanel />
-
-  </div>
-          <button type="button" className="icon-btn theme-btn" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-          </button> 
-
-        
-          <button type="button" className="icon-btn menu-btn" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="site-nav" onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+          <button
+            type="button"
+            className="icon-btn menu-btn"
+            aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={menuOpen}
+            aria-controls="site-nav"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen
+              ? <X aria-hidden="true" />
+              : <Menu aria-hidden="true" />}
           </button>
         </div>
       </header>
@@ -139,21 +186,45 @@ function App() {
       <main id="main">
         <section className="hero section-wrap" id="home">
           <div className="hero-copy">
-            <div className="eyebrow"><span className="status-dot" aria-hidden="true" /> DIGITAL SOLUTIONS FOR AMBITIOUS BUSINESSES</div>
-            <h1>Build beyond<br /> <span>what's possible.</span></h1>
-            <p className="hero-lead">We help businesses move forward with thoughtful technology, powerful digital experiences and solutions built for growth.</p>
-            <div className="hero-buttons">
-              <a className="button button-primary" href="#contact">Start a project <ArrowUpRight size={17} aria-hidden="true" /></a>
-              <a className="text-link" href="#services">Explore what we do <ArrowRight size={16} aria-hidden="true" /></a>
+            <div className="eyebrow">
+              <span className="status-dot" aria-hidden="true" />
+              DIGITAL SOLUTIONS FOR AMBITIOUS BUSINESSES
             </div>
-            <div className="hero-footnote"><span>01 / 04</span><span>INNOVATION WITH PURPOSE</span></div>
+
+            <h1>Build beyond<br /><span>what's possible.</span></h1>
+
+            <p className="hero-lead">
+              We help businesses move forward with thoughtful technology,
+              powerful digital experiences and solutions built for growth.
+            </p>
+
+            <div className="hero-buttons">
+              <a className="button button-primary" href="#contact">
+                Start a project <ArrowUpRight size={17} aria-hidden="true" />
+              </a>
+              <a className="text-link" href="#services">
+                Explore what we do <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </div>
+
+            <div className="hero-footnote">
+              <span>01 / 04</span>
+              <span>INNOVATION WITH PURPOSE</span>
+            </div>
           </div>
+
           <div className="hero-art" role="img" aria-label="Abstract digital architecture artwork">
-            <div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" />
+            <div className="art-orbit orbit-one" />
+            <div className="art-orbit orbit-two" />
             <div className="art-core"><span>R</span></div>
-            <div className="art-line line-one" /><div className="art-line line-two" />
-            <div className="art-label label-top"><Sparkles size={14} aria-hidden="true" /> IDEAS INTO IMPACT</div>
-            <div className="art-label label-bottom">REX GROUPS <span>— EST. 2026</span></div>
+            <div className="art-line line-one" />
+            <div className="art-line line-two" />
+            <div className="art-label label-top">
+              <Sparkles size={14} aria-hidden="true" /> IDEAS INTO IMPACT
+            </div>
+            <div className="art-label label-bottom">
+              REX GROUPS <span>— EST. 2026</span>
+            </div>
             <div className="art-index">RG / 001</div>
           </div>
         </section>
@@ -162,21 +233,36 @@ function App() {
           <div className="section-wrap strip-inner">
             <span>BUILT FOR THE NEXT GENERATION OF BUSINESS</span>
             <div>
-              <b>CLARITY</b><i aria-hidden="true" /> <b>CREATIVITY</b><i aria-hidden="true" /> <b>TECHNOLOGY</b><i aria-hidden="true" /> <b>GROWTH</b>
+              <b>CLARITY</b><i />
+              <b>CREATIVITY</b><i />
+              <b>TECHNOLOGY</b><i />
+              <b>GROWTH</b>
             </div>
           </div>
         </section>
 
         <section className="section-wrap section-block" id="about">
           <div className="section-kicker">01 — WHO WE ARE</div>
+
           <div className="about-grid">
             <h2>Technology should<br />make business <em>better.</em></h2>
+
             <div className="about-copy">
-              <p>Rex Groups is a technology-focused company helping small businesses build a stronger digital presence and work smarter.</p>
-              <p>We bring strategy, design and development together to create useful digital experiences — with a long-term vision to build technology products that serve businesses across the world.</p>
-              <a className="inline-link" href="#contact">Get to know us <ArrowUpRight size={16} aria-hidden="true" /></a>
+              <p>
+                Rex Groups is a technology-focused company helping small
+                businesses build a stronger digital presence and work smarter.
+              </p>
+              <p>
+                We bring strategy, design and development together to create
+                useful digital experiences — with a long-term vision to build
+                technology products that serve businesses across the world.
+              </p>
+              <a className="inline-link" href="#contact">
+                Get to know us <ArrowUpRight size={16} aria-hidden="true" />
+              </a>
             </div>
           </div>
+
           <div className="stats-row">
             <div><strong>01</strong><span>Clear, practical thinking</span></div>
             <div><strong>02</strong><span>Designed around people</span></div>
@@ -187,17 +273,27 @@ function App() {
         <section className="services-section" id="services">
           <div className="section-wrap section-block">
             <div className="section-kicker">02 — WHAT WE DO</div>
+
             <div className="section-heading">
               <h2>Digital tools for<br /><em>real-world growth.</em></h2>
-              <p>From your first website to smarter business workflows, we help turn good ideas into useful digital experiences.</p>
+              <p>
+                From your first website to smarter business workflows, we help
+                turn good ideas into useful digital experiences.
+              </p>
             </div>
+
             <div className="service-grid">
               {SERVICES.map(({ icon: Icon, number, title, text }) => (
                 <article className="service-card" key={number}>
-                  <div className="service-top"><span>{number}</span><Icon size={23} strokeWidth={1.5} aria-hidden="true" /></div>
+                  <div className="service-top">
+                    <span>{number}</span>
+                    <Icon size={23} strokeWidth={1.5} aria-hidden="true" />
+                  </div>
                   <h3>{title}</h3>
                   <p>{text}</p>
-                  <a href="#contact" aria-label={`Enquire about ${title}`}><ArrowUpRight size={18} aria-hidden="true" /></a>
+                  <a href="#contact" aria-label={`Enquire about ${title}`}>
+                    <ArrowUpRight size={18} aria-hidden="true" />
+                  </a>
                 </article>
               ))}
             </div>
@@ -206,23 +302,40 @@ function App() {
 
         <section className="section-wrap section-block" id="work">
           <div className="section-kicker">03 — SELECTED CONCEPTS</div>
+
           <div className="section-heading">
             <h2>Ideas made <em>visible.</em></h2>
-            <p>These are demonstration concepts showing the kind of digital experiences Rex Groups aims to create. They are not presented as completed client projects.</p>
+            <p>
+              These are demonstration concepts showing the kind of digital
+              experiences Rex Groups aims to create. They are not presented
+              as completed client projects.
+            </p>
           </div>
+
           <div className="project-grid">
             {PROJECTS.map((p, i) => (
               <article className="project-card" key={p.title}>
                 <div className={`project-visual ${p.tone}`} aria-hidden="true">
                   <div className="visual-window">
                     <div className="window-bar"><i /><i /><i /></div>
-                    <div className="visual-content"><span>{p.mock.brand}</span><b>{p.mock.headline}</b><small>{p.mock.cta}</small></div>
+                    <div className="visual-content">
+                      <span>{p.mock.brand}</span>
+                      <b>{p.mock.headline}</b>
+                      <small>{p.mock.cta}</small>
+                    </div>
                   </div>
                   <span className="project-number">0{i + 1}</span>
                 </div>
+
                 <div className="project-info">
-                  <div><span>{p.tag}</span><h3>{p.title}</h3><p>{p.desc}</p></div>
-                  <a href="#contact" aria-label={`Ask about a project like ${p.title}`}><ArrowUpRight size={20} aria-hidden="true" /></a>
+                  <div>
+                    <span>{p.tag}</span>
+                    <h3>{p.title}</h3>
+                    <p>{p.desc}</p>
+                  </div>
+                  <a href="#contact" aria-label={`Ask about a project like ${p.title}`}>
+                    <ArrowUpRight size={20} aria-hidden="true" />
+                  </a>
                 </div>
               </article>
             ))}
@@ -232,12 +345,23 @@ function App() {
         <section className="process-section" id="process">
           <div className="section-wrap section-block">
             <div className="section-kicker">04 — HOW WE WORK</div>
+
             <div className="section-heading">
               <h2>Good work starts<br />with <em>good thinking.</em></h2>
-              <p>A straightforward process keeps every project focused, collaborative and moving in the right direction.</p>
+              <p>
+                A straightforward process keeps every project focused,
+                collaborative and moving in the right direction.
+              </p>
             </div>
+
             <div className="process-grid">
-              {PROCESS.map((s) => <div key={s.n}><span>{s.n}</span><h3>{s.title}</h3><p>{s.text}</p></div>)}
+              {PROCESS.map((s) => (
+                <div key={s.n}>
+                  <span>{s.n}</span>
+                  <h3>{s.title}</h3>
+                  <p>{s.text}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -247,26 +371,65 @@ function App() {
             <div>
               <div className="section-kicker">05 — LET'S BUILD SOMETHING</div>
               <h2>Have a business<br />goal in <em>mind?</em></h2>
-              <p>Tell us what you're working on. Let's explore how technology can help you move forward.</p>
+              <p>
+                Tell us what you're working on. Let's explore how technology
+                can help you move forward.
+              </p>
+
               <div className="contact-details">
-                <a href={`mailto:${EMAIL}`}><Mail size={17} aria-hidden="true" />{EMAIL}</a>
-                <a href={`https://wa.me/${WHATSAPP}`} target="_blank" rel="noreferrer"><Phone size={17} aria-hidden="true" />{PHONE_DISPLAY} (WhatsApp)</a>
-                <span><MapPin size={17} aria-hidden="true" />Nigeria · Working towards a global reach</span>
+                <a href={`mailto:${EMAIL}`}>
+                  <Mail size={17} aria-hidden="true" />{EMAIL}
+                </a>
+                <a href={`https://wa.me/${WHATSAPP}`} target="_blank" rel="noreferrer">
+                  <Phone size={17} aria-hidden="true" />{PHONE_DISPLAY} (WhatsApp)
+                </a>
+                <span>
+                  <MapPin size={17} aria-hidden="true" />
+                  Nigeria · Working towards a global reach
+                </span>
               </div>
             </div>
+
             <form className="contact-form" onSubmit={handleContact}>
-              <div className="form-heading">Tell us about your project <ArrowUpRight size={18} aria-hidden="true" /></div>
-              <label>Your name<input name="name" placeholder="Full name" autoComplete="name" maxLength={100} required /></label>
-              <label>Email address<input name="email" type="email" placeholder="you@example.com" autoComplete="email" maxLength={150} required /></label>
-              <label>Business name <span className="optional">(optional)</span><input name="business" placeholder="Your business" autoComplete="organization" maxLength={120} /></label>
-              <label>What do you need help with?<textarea name="message" rows={4} maxLength={1500} placeholder="A little about your project..." required /></label>
-              <button className="button button-primary submit-btn" type="submit">Send enquiry <ArrowUpRight size={17} aria-hidden="true" /></button>
+              <div className="form-heading">
+                Tell us about your project <ArrowUpRight size={18} aria-hidden="true" />
+              </div>
+
+              <label>
+                Your name
+                <input name="name" placeholder="Full name" autoComplete="name" maxLength={100} required />
+              </label>
+
+              <label>
+                Email address
+                <input name="email" type="email" placeholder="you@example.com" autoComplete="email" maxLength={150} required />
+              </label>
+
+              <label>
+                Business name <span className="optional">(optional)</span>
+                <input name="business" placeholder="Your business" autoComplete="organization" maxLength={120} />
+              </label>
+
+              <label>
+                What do you need help with?
+                <textarea name="message" rows={4} maxLength={1500} placeholder="A little about your project..." required />
+              </label>
+
+              <button className="button button-primary submit-btn" type="submit">
+                Send enquiry <ArrowUpRight size={17} aria-hidden="true" />
+              </button>
+
               {sent && (
                 <small className="form-note" role="status">
-                  Your email app should open with your enquiry ready to send. Nothing happened? Email us directly at <a className="note-link" href={`mailto:${EMAIL}`}>{EMAIL}</a>.
+                  Your email app should open with your enquiry ready to send.
+                  Nothing happened? Email us directly at{' '}
+                  <a className="note-link" href={`mailto:${EMAIL}`}>{EMAIL}</a>.
                 </small>
               )}
-              <small className="form-note">This form opens your email app; it does not store submissions on this website.</small>
+
+              <small className="form-note">
+                This form opens your email app; it does not store submissions on this website.
+              </small>
             </form>
           </div>
         </section>
@@ -274,17 +437,31 @@ function App() {
 
       <footer className="footer">
         <div className="section-wrap footer-top">
-          <a className="brand" href="#home"><span className="brand-mark">R<span>.</span></span><span className="brand-name">REX GROUPS<small>TECHNOLOGY · BUSINESS · INNOVATION</small></span></a>
+          <a className="brand" href="#home">
+            <span className="brand-mark">R<span>.</span></span>
+            <span className="brand-name">
+              REX GROUPS
+              <small>TECHNOLOGY · BUSINESS · INNOVATION</small>
+            </span>
+          </a>
+
           <p>Building useful technology<br />for a world in motion.</p>
           <a className="back-top" href="#home">BACK TO TOP ↑</a>
         </div>
+
         <div className="section-wrap footer-bottom">
           <span>© {new Date().getFullYear()} Rex Groups. All rights reserved.</span>
           <span>Made with purpose in Nigeria.</span>
+
           <div>
-            <a href={`mailto:${EMAIL}`} aria-label="Email"><Mail size={16} aria-hidden="true" /></a>
+            <a href={`mailto:${EMAIL}`} aria-label="Email">
+              <Mail size={16} aria-hidden="true" />
+            </a>
+
             {visibleSocials.map(({ label, href, icon: Icon }) => (
-              <a key={label} href={href} aria-label={label} target="_blank" rel="noreferrer"><Icon size={16} aria-hidden="true" /></a>
+              <a key={label} href={href} aria-label={label} target="_blank" rel="noreferrer">
+                <Icon size={16} aria-hidden="true" />
+              </a>
             ))}
           </div>
         </div>
