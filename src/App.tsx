@@ -5,7 +5,7 @@ import {
   Workflow, Settings, Mail, Phone, MapPin, Instagram, Linkedin, Github, Sparkles,
 } from 'lucide-react'
 
-import AuthPanel from './AuthPanel'
+import { AuthProvider, AuthButton } from './AuthPanel'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
@@ -121,6 +121,7 @@ function App() {
 
   return (
     <div className={`app ${theme}`}>
+     <AuthProvider>
       <a className="skip-link" href="#main">Skip to content</a>
 
       <header className="header">
@@ -148,13 +149,13 @@ function App() {
           </a>
 
           <div className="mobile-auth">
-            <AuthPanel />
+            <AuthButton onOpen={closeMenu} />
           </div>
         </nav>
 
         <div className="header-actions">
           <div className="desktop-auth">
-            <AuthPanel />
+            <AuthButton />
           </div>
 
           <button
@@ -466,6 +467,7 @@ function App() {
           </div>
         </div>
       </footer>
+     </AuthProvider>
     </div>
   )
 }
