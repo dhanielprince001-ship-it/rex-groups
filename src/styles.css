@@ -198,8 +198,7 @@ button, input, textarea {
 
 /* CENTRED AUTHENTICATION MODAL */
 
-.auth-panel:has(.auth-box)::before {
-  content: "";
+.auth-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, .76);
@@ -1065,6 +1064,11 @@ h2 em {
 
   .mobile-auth .auth-panel {
     display: flex !important;
+    width: 100%;
+  }
+
+  .mobile-auth .auth-user,
+  .mobile-auth .auth-user button {
     width: 100%;
   }
 
