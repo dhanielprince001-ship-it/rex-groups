@@ -64,5 +64,41 @@ html[data-theme=dark]{background:#0b0d10;color-scheme:dark}html[data-theme=light
     padding: 9px 10px !important;
     font-size: 11px;
   }
+} 
+.desktop-auth {
+  display: inline-flex;
 }
+
+.mobile-auth {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .desktop-auth {
+    display: none;
+  }
+
+  .mobile-auth {
+    display: flex;
+    justify-content: stretch;
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .mobile-auth .auth-panel {
+    width: 100%;
+  }
+
+  .mobile-auth .auth-panel > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .header-actions {
+    gap: 8px;
+  }
+}
+
+
+
 
