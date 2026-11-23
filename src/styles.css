@@ -175,57 +175,49 @@ button, input, textarea {
   display: none;
 }
 
-/* AUTHENTICATION BUTTON */
+/* AUTHENTICATION BUTTON (header) */
 
 .auth-panel {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
-  position: relative;
-  z-index: 10001;
 }
 
-.auth-panel > button {
-  background: var(--accent) !important;
-  color: var(--accentText) !important;
-  border: 0 !important;
-  border-radius: 7px !important;
-  padding: 11px 15px !important;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  cursor: pointer;
+.auth-panel > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accentText);
+  border-radius: 7px;
+  padding: 11px 15px;
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-/* CENTRED AUTHENTICATION MODAL */
-
-.auth-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, .76);
-  backdrop-filter: blur(9px);
-  z-index: 9998;
+.nav .auth-panel > a:hover,
+.auth-panel > a:hover {
+  color: var(--accentText);
 }
 
-.auth-box {
-  position: fixed !important;
-  top: 50% !important;
-  left: 50% !important;
-  right: auto !important;
-  bottom: auto !important;
-  transform: translate(-50%, -50%) !important;
-  width: min(430px, calc(100vw - 32px)) !important;
-  max-height: calc(100dvh - 40px);
-  overflow-y: auto;
-  padding: 34px 30px !important;
-  border: 1px solid var(--line) !important;
-  border-radius: 17px !important;
-  background: var(--surface) !important;
-  color: var(--text) !important;
-  box-shadow: 0 25px 90px rgba(0, 0, 0, .45);
-  z-index: 10000;
+/* ACCOUNT SECTION (inline sign-in, no popup) */
+
+.account-section {
+  padding-top: 90px;
+  padding-bottom: 90px;
 }
 
-.auth-box h2 {
+.account-card {
+  width: min(460px, 100%);
+  margin: 30px auto 0;
+  padding: 34px 30px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.account-card h2 {
   font: 600 27px Manrope, system-ui, sans-serif;
   letter-spacing: -1px;
   text-align: center;
@@ -233,19 +225,19 @@ button, input, textarea {
   color: var(--text);
 }
 
-.auth-box form {
+.account-card form {
   display: grid;
   gap: 15px;
 }
 
-.auth-box label {
+.account-card label {
   display: grid;
   gap: 8px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.auth-box input {
+.account-card input {
   width: 100%;
   padding: 13px;
   border: 1px solid var(--line);
@@ -255,17 +247,17 @@ button, input, textarea {
   font-size: 16px;
 }
 
-.auth-box input:focus {
+.account-card input:focus {
   outline: 2px solid var(--accentInk);
   outline-offset: 1px;
 }
 
-.auth-box button {
+.account-card button {
   cursor: pointer;
 }
 
-.auth-box form button,
-.auth-box > button {
+.account-card form button,
+.account-card > button {
   display: block;
   width: 100%;
   min-height: 44px;
@@ -276,19 +268,24 @@ button, input, textarea {
   font-weight: 600;
 }
 
-.auth-box form button {
+.account-card form button {
   border: 0;
   background: var(--accent);
   color: var(--accentText);
 }
 
-.auth-box > button {
+.account-card > button {
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
 }
 
-.auth-box p {
+.account-card button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.account-card p {
   margin: 15px 0 0;
   color: var(--muted);
   font-size: 12px;
@@ -1072,7 +1069,7 @@ h2 em {
     width: 100%;
   }
 
-  .mobile-auth .auth-panel > button {
+  .mobile-auth .auth-panel > a {
     width: 100%;
     min-height: 46px;
     justify-content: center;
@@ -1296,11 +1293,11 @@ h2 em {
     font-size: 9px;
   }
 
-  .auth-box {
-    padding: 28px 20px !important;
+  .account-card {
+    padding: 28px 20px;
   }
 
-  .auth-box h2 {
+  .account-card h2 {
     font-size: 23px;
   }
 }
