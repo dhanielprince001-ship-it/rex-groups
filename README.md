@@ -20,4 +20,10 @@ Push this project to GitHub and import the repository into Vercel. Use:
 - Contact details, social links, services, projects and process steps are all defined at the top of `src/App.tsx`.
 - Social icons only appear once you add a real URL to the `SOCIALS` list in `src/App.tsx`.
 - The theme (dark/light) follows the visitor's system setting and is remembered between visits.
-- This is the website foundation. Authentication, a database, payments and the future Rex Groups Business OS are separate development stages.
+- Sign-in uses Firebase Authentication (email/password and Google popup). A database, payments and the future Rex Groups Business OS are separate development stages.
+
+## Firebase setup
+1. Copy `.env.example` to `.env` and fill in the six `VITE_FIREBASE_*` values.
+2. In Firebase Console > Authentication > Sign-in method, enable Email/Password and Google.
+3. In Authentication > Settings > Authorized domains, add your Vercel domain (and any custom domain).
+4. On Vercel, add the same variables under Project Settings > Environment Variables and redeploy.
