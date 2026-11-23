@@ -4,6 +4,8 @@ import {
   Workflow, Settings, Mail, Phone, MapPin, Instagram, Linkedin, Github, Sparkles,
 } from 'lucide-react'
 
+import AuthPanel from './AuthPanel'
+
 /* ------------------------------------------------------------------ */
 /* Site configuration — edit these in one place                        */
 /* ------------------------------------------------------------------ */
@@ -116,7 +118,9 @@ function App() {
         <div className="header-actions">
           <button type="button" className="icon-btn theme-btn" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
-          </button>
+          </button> 
+
+          <AuthPanel />
           <button type="button" className="icon-btn menu-btn" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="site-nav" onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
           </button>
