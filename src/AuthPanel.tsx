@@ -108,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOutUser() {
     if (!auth) return
+    setNotice('')
     await signOut(auth)
   }
 
@@ -125,32 +126,146 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-/** Header button: jumps to the account section, or signs out. No popups. */
+/** Header button: "Sign in / Register" when signed out, "My account" when signed in. */
 export function AuthButton({ onOpen }: { onOpen?: () => void }) {
-  const { user, signOutUser } = useAuthContext()
+  const { user, ready } = useAuthContext()
 
-  if (user) {
-    return (
-      <div className="auth-user">
-        <button type="button" onClick={signOutUser}>
-          Sign out
-        </button>
-      </div>
-    )
-  }
+  // Wait for Firebase to restore the session so the wrong button never flashes.
+  if (!ready) return null
 
   return (
     <div className="auth-panel">
       <a href="#account" onClick={onOpen}>
-        Sign in / Register
+        {user ? 'My account' : 'Sign in / Register'}
       </a>
     </div>
   )
 }
 
+function providerLabel(user: User): string {
+  const id = user.providerData[0]?.providerId
+  if (id === 'google.com') return 'Google'
+  if (id === 'password') return 'Email and password'
+  return id ?? 'Unknown'
+}
+
+function formatDate(value?: string): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+}
+
+/** Shown instead of the sign-in form once someone is signed in. */
+function AccountCenter({ user }: { user: User }) {
+  const { setNotice, refresh, signOutUser } = useAuthContext()
+  const [name, setName] = useState(user.displayName ?? '')
+  const [saving, setSaving] = useState(false)
+
+  const usesPassword = user.providerData.some((p) => p.providerId === 'password')
+  const label = user.displayName || user.email || 'Your account'
+
+  async function saveName(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setSaving(true)
+    setNotice('')
+
+    try {
+      await updateProfile(user, { displayName: name.trim() })
+      refresh()
+      setNotice('Name updated.')
+    } catch (error) {
+      setNotice(friendlyError(error, 'Could not update your name.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function sendReset() {
+    if (!auth || !user.email) return
+
+    try {
+      await sendPasswordResetEmail(auth, user.email)
+      setNotice(`Password reset email sent to ${user.email}.`)
+    } catch (error) {
+      setNotice(friendlyError(error, 'Could not send reset email.'))
+    }
+  }
+
+  return (
+    <>
+      <div className="account-profile">
+        {user.photoURL ? (
+          <img
+            className="account-avatar"
+            src={user.photoURL}
+            alt=""
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="account-avatar" aria-hidden="true">
+            {label.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <h2>{label}</h2>
+        {user.displayName && user.email && <p>{user.email}</p>}
+      </div>
+
+      <dl className="account-details">
+        <div>
+          <dt>Sign-in method</dt>
+          <dd>{providerLabel(user)}</dd>
+        </div>
+        <div>
+          <dt>Email verified</dt>
+          <dd>{user.emailVerified ? 'Yes' : 'No'}</dd>
+        </div>
+        <div>
+          <dt>Member since</dt>
+          <dd>{formatDate(user.metadata.creationTime)}</dd>
+        </div>
+        <div>
+          <dt>Last sign-in</dt>
+          <dd>{formatDate(user.metadata.lastSignInTime)}</dd>
+        </div>
+      </dl>
+
+      <form onSubmit={saveName}>
+        <label>
+          Display name
+          <input
+            value={name}
+            autoComplete="name"
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </label>
+        <button type="submit" disabled={saving}>
+          {saving ? 'Saving...' : 'Save name'}
+        </button>
+      </form>
+
+      {usesPassword && (
+        <button type="button" onClick={sendReset}>
+          Send password reset email
+        </button>
+      )}
+
+      <button type="button" onClick={signOutUser}>
+        Sign out
+      </button>
+    </>
+  )
+}
+
 /** The sign-in / register form, shown inline on the page. */
 export function AuthSection() {
-  const { user, ready, notice, setNotice, refresh, signOutUser } = useAuthContext()
+  const { user, ready, notice, setNotice, refresh } = useAuthContext()
 
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
@@ -221,19 +336,15 @@ export function AuthSection() {
 
   return (
     <section className="section-wrap section-block account-section" id="account">
-      <div className="section-kicker">06 — YOUR ACCOUNT</div>
+      <div className="section-kicker">
+        {user ? '06 — ACCOUNT CENTER' : '06 — YOUR ACCOUNT'}
+      </div>
 
       <div className="account-card">
         {!ready ? (
           <p>Loading…</p>
         ) : user ? (
-          <>
-            <h2>Welcome, {user.displayName || user.email}</h2>
-            <p>You are signed in.</p>
-            <button type="button" onClick={signOutUser}>
-              Sign out
-            </button>
-          </>
+          <AccountCenter user={user} />
         ) : (
           <>
             <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
