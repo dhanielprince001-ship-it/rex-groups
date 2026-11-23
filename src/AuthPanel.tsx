@@ -69,7 +69,7 @@ function friendlyError(error: unknown, fallback: string): string {
     case 'auth/operation-not-allowed':
       return 'This sign-in method is not enabled. Enable it in Firebase Console > Authentication > Sign-in method.'
     case 'auth/unauthorized-domain':
-      return 'This domain is not authorised in Firebase. Add it under Authentication > Settings > Authorized domains.'
+      return `Firebase rejected this domain (${window.location.hostname}). Project in use: ${auth?.app.options.projectId ?? 'none'}. Auth domain in use: ${auth?.config.authDomain ?? 'none'}. Check that the project matches and that this domain is under Authentication > Settings > Authorized domains.`
     case 'auth/network-request-failed':
       return 'Network error. Check your connection and try again.'
     default:
