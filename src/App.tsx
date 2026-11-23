@@ -5,7 +5,7 @@ import {
   Workflow, Settings, Mail, Phone, MapPin, Instagram, Linkedin, Github, Sparkles,
 } from 'lucide-react'
 
-import { AuthProvider, AuthButton, AuthSection } from './AuthPanel'
+import { AuthButton, AuthSection } from './AuthPanel'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
