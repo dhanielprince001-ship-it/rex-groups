@@ -74,6 +74,20 @@ type Customer = {
   }
 }
 
+type ReviewStatus = 'Pending' | 'Approved' | 'Rejected'
+
+type Review = {
+  id: string
+  name: string
+  email: string
+  rating: number
+  comment: string
+  status: ReviewStatus
+  createdAt?: {
+    toDate: () => Date
+  }
+}
+
 function safeDate(value?: { toDate: () => Date }): Date | null {
   try {
     const date = value?.toDate()
