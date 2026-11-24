@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
