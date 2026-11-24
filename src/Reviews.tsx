@@ -1,9 +1,9 @@
+
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   addDoc,
   collection,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   where,
@@ -17,6 +17,9 @@ type Review = {
   rating: number
   comment: string
   adminReply?: string
+  createdAt?: {
+    toMillis: () => number
+  }
 }
 
 export default function Reviews() {
@@ -29,12 +32,14 @@ export default function Reviews() {
   const [message, setMessage] = useState('')
 
   useEffect(() => {
-    if (!db) return
+    if (!db) {
+      console.error('Firebase database is not connected.')
+      return
+    }
 
     const reviewsQuery = query(
       collection(db, 'reviews'),
-      where('status', '==', 'Approved'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'Approved')
     )
 
     const unsubscribe = onSnapshot(
@@ -49,7 +54,13 @@ export default function Reviews() {
             rating: Number(data.rating) || 5,
             comment: data.comment || '',
             adminReply: data.adminReply || '',
+            createdAt: data.createdAt,
           }
+        })
+
+        approvedReviews.sort((a, b) => {
+          return (b.createdAt?.toMillis() || 0) -
+            (a.createdAt?.toMillis() || 0)
         })
 
         setReviews(approvedReviews)
@@ -111,9 +122,7 @@ export default function Reviews() {
     <section className="reviews-section" id="reviews">
       <div className="reviews-heading">
         <span className="section-label">CUSTOMER FEEDBACK</span>
-
         <h2>What Our Customers Say</h2>
-
         <p>
           Your experience matters to us. Read customer feedback or share your
           experience with Rex Groups.
@@ -156,7 +165,6 @@ export default function Reviews() {
                       <MessageSquare size={16} />
                       <strong>Rex Groups response</strong>
                     </div>
-
                     <p>{review.adminReply}</p>
                   </div>
                 )}
@@ -167,13 +175,11 @@ export default function Reviews() {
 
         <form className="review-form" onSubmit={submitReview}>
           <h3>Share Your Experience</h3>
-
           <p>
             Your review will be checked by our team before it appears publicly.
           </p>
 
           <label htmlFor="review-name">Your name</label>
-
           <input
             id="review-name"
             type="text"
@@ -185,7 +191,6 @@ export default function Reviews() {
           />
 
           <label htmlFor="review-email">Email address</label>
-
           <input
             id="review-email"
             type="email"
@@ -197,7 +202,6 @@ export default function Reviews() {
           />
 
           <label>Your rating</label>
-
           <div className="rating-picker" aria-label="Choose a rating">
             {Array.from({ length: 5 }, (_, index) => {
               const value = index + 1
@@ -221,7 +225,6 @@ export default function Reviews() {
           </div>
 
           <label htmlFor="review-comment">Your review</label>
-
           <textarea
             id="review-comment"
             value={comment}
