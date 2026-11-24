@@ -28,6 +28,7 @@ import {
   X,
   Send,
   Phone,
+  Star,
 } from 'lucide-react'
 
 import { db } from './firebase'
@@ -166,11 +167,11 @@ export default function AdminDashboard() {
   const { user, ready: authReady } = useAuth()
 
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
-const [customers, setCustomers] = useState<Customer[]>([])
-const [reviews, setReviews] = useState<Review[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
 
-const [reviewsLoading, setReviewsLoading] = useState(true)
-const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
+  const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
   const [loading, setLoading] = useState(true)
   const [customersLoading, setCustomersLoading] = useState(true)
 
@@ -218,8 +219,10 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
     if (!authReady || !isAdmin) {
       setLoading(false)
       setCustomersLoading(false)
+      setReviewsLoading(false)
       setEnquiries([])
       setCustomers([])
+      setReviews([])
       return
     }
 
@@ -229,11 +232,13 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
       setError('Firestore is not initialized. Check Firebase configuration.')
       setLoading(false)
       setCustomersLoading(false)
+      setReviewsLoading(false)
       return
     }
 
     setLoading(true)
     setCustomersLoading(true)
+    setReviewsLoading(true)
     setError('')
 
     const enquiriesQuery = query(
@@ -247,9 +252,9 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
     )
 
     const reviewsQuery = query(
-  collection(firestore, 'reviews'),
-  orderBy('createdAt', 'desc'),
-)
+      collection(firestore, 'reviews'),
+      orderBy('createdAt', 'desc'),
+    )
 
     const unsubscribeEnquiries = onSnapshot(
       enquiriesQuery,
@@ -287,25 +292,25 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
         )
         setCustomersLoading(false)
       },
-      const unsubscribeReviews = onSnapshot(
-  reviewsQuery,
-  (snapshot) => {
-    setReviews(
-      snapshot.docs.map((item) => ({
-        id: item.id,
-        ...item.data(),
-      })) as Review[],
     )
-    setReviewsLoading(false)
-  },
-  (err) => {
-    console.error('Reviews error:', err)
-    setError('Unable to load customer reviews.')
-    setReviewsLoading(false)
-  },
-)
+
+    const unsubscribeReviews = onSnapshot(
+      reviewsQuery,
+      (snapshot) => {
+        setReviews(
+          snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as Review[],
+        )
+        setReviewsLoading(false)
+      },
+      (err) => {
+        console.error('Reviews error:', err)
+        setError('Unable to load customer reviews. Check your reviews rules.')
+        setReviewsLoading(false)
+      },
     )
-    
 
     return () => {
       unsubscribeEnquiries()
@@ -334,6 +339,52 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
     } catch (err) {
       console.error('Status update failed:', err)
       setError('Could not update this enquiry. Please try again.')
+    } finally {
+      setUpdating('')
+    }
+  }
+
+  // Approve / reject a customer review
+  async function changeReviewStatus(id: string, status: ReviewStatus) {
+    const firestore = db
+
+    if (!firestore || !isAdmin) return
+
+    setUpdating(id)
+    setError('')
+    setSuccess('')
+
+    try {
+      await updateDoc(doc(firestore, 'reviews', id), {
+        status,
+        updatedAt: serverTimestamp(),
+      })
+
+      setSuccess(`Review marked as ${status.toLowerCase()}.`)
+    } catch (err) {
+      console.error('Review update failed:', err)
+      setError('Could not update this review. Please try again.')
+    } finally {
+      setUpdating('')
+    }
+  }
+
+  async function removeReview(id: string) {
+    const firestore = db
+
+    if (!firestore || !isAdmin) return
+    if (!window.confirm('Delete this review permanently?')) return
+
+    setUpdating(id)
+    setError('')
+    setSuccess('')
+
+    try {
+      await deleteDoc(doc(firestore, 'reviews', id))
+      setSuccess('Review deleted.')
+    } catch (err) {
+      console.error('Review delete failed:', err)
+      setError('Could not delete this review. Please try again.')
     } finally {
       setUpdating('')
     }
@@ -520,6 +571,16 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
   })
 
   const recentEnquiries = enquiries.slice(0, 5)
+
+  const filteredReviews = reviews.filter(
+    (review) =>
+      reviewFilter === 'All' ||
+      (review.status || 'Pending') === reviewFilter,
+  )
+
+  const pendingReviews = reviews.filter(
+    (review) => (review.status || 'Pending') === 'Pending',
+  ).length
 
   // Print business report
   function printReport() {
@@ -847,6 +908,120 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
                 </div>
               </article>
             ))}
+          </div>
+        )}
+
+        {/* Review moderation */}
+        <div className="admin-list-heading">
+          <div>
+            <span className="section-kicker">
+              REVIEW MODERATION
+            </span>
+            <h3>Customer reviews</h3>
+            <p>
+              Approve reviews to show them publicly on the website.
+            </p>
+          </div>
+
+          <span>
+            {pendingReviews} pending · {reviews.length} total
+          </span>
+        </div>
+
+        <div className="admin-enquiry-tools">
+          <label className="admin-filter">
+            <Filter size={17} />
+
+            <select
+              value={reviewFilter}
+              onChange={(event) =>
+                setReviewFilter(event.target.value as ReviewStatus | 'All')
+              }
+              aria-label="Filter reviews by status"
+            >
+              <option value="All">All reviews</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </label>
+        </div>
+
+        {reviewsLoading ? (
+          <div className="admin-empty">Loading reviews...</div>
+        ) : filteredReviews.length === 0 ? (
+          <div className="admin-empty">
+            <Star size={30} />
+            <h3>No reviews found</h3>
+            <p>Customer reviews will appear here for approval.</p>
+          </div>
+        ) : (
+          <div className="admin-enquiry-list">
+            {filteredReviews.map((review) => {
+              const status = review.status || 'Pending'
+
+              return (
+                <article className="admin-enquiry" key={review.id}>
+                  <div className="admin-enquiry-top">
+                    <div>
+                      <h3>{review.name || 'Customer'}</h3>
+
+                      <a href={`mailto:${review.email}`}>{review.email}</a>
+
+                      <span>Rating: {review.rating} / 5</span>
+                    </div>
+
+                    <span className={`admin-status ${status.toLowerCase()}`}>
+                      {status}
+                    </span>
+                  </div>
+
+                  <p className="admin-message">{review.comment}</p>
+
+                  <div className="admin-enquiry-bottom">
+                    <small>
+                      {safeDate(review.createdAt)?.toLocaleString() ||
+                        'Date unavailable'}
+                    </small>
+
+                    <div className="admin-report-actions">
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() =>
+                          changeReviewStatus(review.id, 'Approved')
+                        }
+                        disabled={updating === review.id || status === 'Approved'}
+                      >
+                        <CheckCircle2 size={16} />
+                        Approve
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() =>
+                          changeReviewStatus(review.id, 'Rejected')
+                        }
+                        disabled={updating === review.id || status === 'Rejected'}
+                      >
+                        <X size={16} />
+                        Reject
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => removeReview(review.id)}
+                        disabled={updating === review.id}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
           </div>
         )}
 
