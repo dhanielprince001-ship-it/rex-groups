@@ -25,12 +25,18 @@ import {
   FileText,
   Filter,
   X,
+  Send,
 } from 'lucide-react'
 
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
+
+// EmailJS configuration
+const EMAILJS_SERVICE_ID = 'service_o4p3v01'
+const EMAILJS_REPLY_TEMPLATE_ID = 'template_e2pq1x7'
+const EMAILJS_PUBLIC_KEY = '0NkqQxyu5RfJ2UFXl'
 
 type EnquiryStatus = 'Pending' | 'Contacted' | 'Completed'
 type FilterStatus = 'All' | EnquiryStatus
@@ -72,11 +78,13 @@ function safeDate(value?: { toDate: () => Date }): Date | null {
 }
 
 function formatDate(value?: { toDate: () => Date }) {
-  return safeDate(value)?.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }) || '—'
+  return (
+    safeDate(value)?.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }) || '—'
+  )
 }
 
 function escapeCSV(value: unknown) {
@@ -136,14 +144,21 @@ export default function AdminDashboard() {
   const [customersLoading, setCustomersLoading] = useState(true)
 
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [updating, setUpdating] = useState('')
+
   const [customerSearch, setCustomerSearch] = useState('')
   const [enquirySearch, setEnquirySearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('All')
 
+  // Customer reply state
+  const [replyingTo, setReplyingTo] = useState('')
+  const [replyMessage, setReplyMessage] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
+
   const isAdmin = user?.uid === ADMIN_UID
 
-  // Filter enquiries (must stay above the early returns below: Rules of Hooks)
+  // Filter enquiries
   const filteredEnquiries = useMemo(() => {
     const search = enquirySearch.trim().toLowerCase()
 
@@ -227,7 +242,9 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error('Customer profiles error:', err)
-        setError('Unable to load customers. Check your profiles collection rules.')
+        setError(
+          'Unable to load customers. Check your profiles collection rules.',
+        )
         setCustomersLoading(false)
       },
     )
@@ -246,12 +263,15 @@ export default function AdminDashboard() {
 
     setUpdating(id)
     setError('')
+    setSuccess('')
 
     try {
       await updateDoc(doc(firestore, 'enquiries', id), {
         status,
         updatedAt: serverTimestamp(),
       })
+
+      setSuccess('Enquiry status updated successfully.')
     } catch (err) {
       console.error('Status update failed:', err)
       setError('Could not update this enquiry. Please try again.')
@@ -260,11 +280,88 @@ export default function AdminDashboard() {
     }
   }
 
+  // Send customer email reply
+  async function sendCustomerReply(item: Enquiry) {
+    const message = replyMessage.trim()
+
+    if (!isAdmin) {
+      setError('Administrator permission is required.')
+      return
+    }
+
+    if (!item.email) {
+      setError('This customer does not have an email address.')
+      return
+    }
+
+    if (!message) {
+      setError('Please write a message before sending.')
+      return
+    }
+
+    setSendingReply(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const response = await fetch(
+        'https://api.emailjs.com/api/v1.0/email/send',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            service_id: EMAILJS_SERVICE_ID,
+            template_id: EMAILJS_REPLY_TEMPLATE_ID,
+            user_id: EMAILJS_PUBLIC_KEY,
+            template_params: {
+              to_email: item.email,
+              to_name: item.name || 'Customer',
+              subject: 'Response to your enquiry — Rex Groups',
+              message,
+              reply_to: 'rexgroups.uk@gmail.com',
+              business: item.business || 'General enquiry',
+            },
+          }),
+        },
+      )
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        throw new Error(responseText || 'Email could not be sent.')
+      }
+
+      const firestore = db
+
+      if (firestore) {
+        await updateDoc(doc(firestore, 'enquiries', item.id), {
+          status: 'Contacted',
+          updatedAt: serverTimestamp(),
+          lastReplyAt: serverTimestamp(),
+        })
+      }
+
+      setSuccess(`Your reply was sent to ${item.email}.`)
+      setReplyMessage('')
+      setReplyingTo('')
+    } catch (err) {
+      console.error('Customer reply failed:', err)
+      setError(
+        'Unable to send the reply. Check your EmailJS template and settings.',
+      )
+    } finally {
+      setSendingReply(false)
+    }
+  }
+
   // Authentication loading
   if (!authReady) {
     return (
       <section className="admin-section" id="admin">
-        <div className="admin-card">Checking administrator access...</div>
+        <div className="admin-card">
+          Checking administrator access...
+        </div>
       </section>
     )
   }
@@ -276,8 +373,12 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Administrator access</h2>
-          <p>Please sign in with your administrator account to continue.</p>
-          <a href="#account" className="admin-button">Go to sign in</a>
+          <p>
+            Please sign in with your administrator account to continue.
+          </p>
+          <a href="#account" className="admin-button">
+            Go to sign in
+          </a>
         </div>
       </section>
     )
@@ -290,7 +391,9 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Access restricted</h2>
-          <p>This account does not have administrator permission.</p>
+          <p>
+            This account does not have administrator permission.
+          </p>
         </div>
       </section>
     )
@@ -368,22 +471,36 @@ export default function AdminDashboard() {
     <section className="admin-section" id="admin">
       <div className="section-wrap">
 
+        {/* Dashboard heading */}
         <div className="admin-heading">
           <div>
             <span className="section-kicker">
               REX GROUPS — CONTROL CENTRE
             </span>
-            <h2>Admin <em>dashboard.</em></h2>
-            <p>Monitor customers, business enquiries and activity.</p>
+            <h2>
+              Admin <em>dashboard.</em>
+            </h2>
+            <p>
+              Monitor customers, business enquiries and activity.
+            </p>
           </div>
 
           <span className="admin-secure">
-            <ShieldCheck size={16} /> Secure access
+            <ShieldCheck size={16} />
+            Secure access
           </span>
         </div>
 
         {error && (
-          <p className="admin-error" role="alert">{error}</p>
+          <p className="admin-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        {success && (
+          <p className="admin-success" role="status">
+            {success}
+          </p>
         )}
 
         {/* Report actions */}
@@ -441,22 +558,30 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Performance */}
+        {/* Performance analytics */}
         <div className="admin-analytics-grid">
           <div className="admin-analytics-card">
             <div className="admin-analytics-heading">
               <div>
-                <span className="section-kicker">PERFORMANCE</span>
+                <span className="section-kicker">
+                  PERFORMANCE
+                </span>
                 <h3>Enquiry overview</h3>
-                <p>Enquiries received over the last six months.</p>
+                <p>
+                  Enquiries received over the last six months.
+                </p>
               </div>
               <BarChart3 size={24} />
             </div>
 
             <div className="admin-chart">
               {monthlyData.map((month, index) => (
-                <div className="admin-chart-column" key={`${month.label}-${index}`}>
+                <div
+                  className="admin-chart-column"
+                  key={`${month.label}-${index}`}
+                >
                   <strong>{month.count}</strong>
+
                   <div className="admin-chart-track">
                     <div
                       className="admin-chart-bar"
@@ -468,6 +593,7 @@ export default function AdminDashboard() {
                       }}
                     />
                   </div>
+
                   <span>{month.label}</span>
                 </div>
               ))}
@@ -477,22 +603,30 @@ export default function AdminDashboard() {
           <div className="admin-analytics-card">
             <div className="admin-analytics-heading">
               <div>
-                <span className="section-kicker">BUSINESS RESULTS</span>
+                <span className="section-kicker">
+                  BUSINESS RESULTS
+                </span>
                 <h3>Completion rate</h3>
-                <p>Percentage of enquiries marked completed.</p>
+                <p>
+                  Percentage of enquiries marked completed.
+                </p>
               </div>
               <Activity size={24} />
             </div>
 
             <div className="admin-completion">
               <strong>{completionRate}%</strong>
+
               <div className="admin-completion-track">
                 <div
                   className="admin-completion-bar"
                   style={{ width: `${completionRate}%` }}
                 />
               </div>
-              <p>{completed} completed out of {enquiries.length} enquiries.</p>
+
+              <p>
+                {completed} completed out of {enquiries.length} enquiries.
+              </p>
             </div>
           </div>
         </div>
@@ -501,7 +635,9 @@ export default function AdminDashboard() {
         <div className="admin-analytics-card admin-recent-card">
           <div className="admin-analytics-heading">
             <div>
-              <span className="section-kicker">LATEST UPDATES</span>
+              <span className="section-kicker">
+                LATEST UPDATES
+              </span>
               <h3>Recent activity</h3>
               <p>Your five latest customer enquiries.</p>
             </div>
@@ -515,19 +651,28 @@ export default function AdminDashboard() {
           ) : (
             <div className="admin-recent-list">
               {recentEnquiries.map((item) => (
-                <div className="admin-recent-item" key={item.id}>
+                <div
+                  className="admin-recent-item"
+                  key={item.id}
+                >
                   <div className="admin-recent-icon">
                     <Inbox size={17} />
                   </div>
+
                   <div className="admin-recent-info">
-                    <strong>{item.name || 'Unnamed customer'}</strong>
+                    <strong>
+                      {item.name || 'Unnamed customer'}
+                    </strong>
                     <span>{item.email}</span>
                     <small>
                       {safeDate(item.createdAt)?.toLocaleString() ||
                         'Date unavailable'}
                     </small>
                   </div>
-                  <span className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}>
+
+                  <span
+                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
+                  >
                     {item.status || 'Pending'}
                   </span>
                 </div>
@@ -536,18 +681,24 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Customers */}
+        {/* Customer directory */}
         <div className="admin-list-heading">
           <div>
-            <span className="section-kicker">CUSTOMER DIRECTORY</span>
+            <span className="section-kicker">
+              CUSTOMER DIRECTORY
+            </span>
             <h3>Registered customers</h3>
-            <p>View and search customer accounts registered with Rex Groups.</p>
+            <p>
+              View and search customer accounts registered with Rex Groups.
+            </p>
           </div>
+
           <span>{customers.length} customers</span>
         </div>
 
         <div className="admin-customer-search">
           <Search size={19} />
+
           <input
             type="search"
             placeholder="Search by customer name, email or ID..."
@@ -555,6 +706,7 @@ export default function AdminDashboard() {
             onChange={(event) => setCustomerSearch(event.target.value)}
             aria-label="Search customers"
           />
+
           {customerSearch && (
             <button
               type="button"
@@ -567,7 +719,9 @@ export default function AdminDashboard() {
         </div>
 
         {customersLoading ? (
-          <div className="admin-empty">Loading customer profiles...</div>
+          <div className="admin-empty">
+            Loading customer profiles...
+          </div>
         ) : filteredCustomers.length === 0 ? (
           <div className="admin-empty">
             <Users size={30} />
@@ -581,7 +735,10 @@ export default function AdminDashboard() {
         ) : (
           <div className="admin-customer-list">
             {filteredCustomers.map((customer) => (
-              <article className="admin-customer" key={customer.id}>
+              <article
+                className="admin-customer"
+                key={customer.id}
+              >
                 <div className="admin-customer-profile">
                   {customer.photoURL ? (
                     <img
@@ -593,16 +750,21 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="admin-customer-avatar admin-customer-initial">
                       {(customer.name || customer.email || 'C')
-                        .charAt(0).toUpperCase()}
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
 
                   <div className="admin-customer-info">
-                    <h3>{customer.name || 'Unnamed customer'}</h3>
+                    <h3>
+                      {customer.name || 'Unnamed customer'}
+                    </h3>
+
                     <a href={`mailto:${customer.email || ''}`}>
                       <Mail size={14} />
                       {customer.email || 'No email available'}
                     </a>
+
                     <span>
                       {customer.provider === 'google.com'
                         ? 'Google account'
@@ -618,6 +780,7 @@ export default function AdminDashboard() {
                     <Calendar size={14} />
                     Joined: {formatDate(customer.createdAt)}
                   </span>
+
                   <small>
                     Last sign-in: {formatDate(customer.lastSignInAt)}
                   </small>
@@ -630,16 +793,24 @@ export default function AdminDashboard() {
         {/* Enquiry management */}
         <div className="admin-list-heading">
           <div>
-            <span className="section-kicker">INBOX MANAGEMENT</span>
+            <span className="section-kicker">
+              INBOX MANAGEMENT
+            </span>
             <h3>Customer enquiries</h3>
-            <p>Search messages, filter by status and update progress.</p>
+            <p>
+              Search messages, reply to customers and update progress.
+            </p>
           </div>
-          <span>{filteredEnquiries.length} of {enquiries.length} records</span>
+
+          <span>
+            {filteredEnquiries.length} of {enquiries.length} records
+          </span>
         </div>
 
         <div className="admin-enquiry-tools">
           <div className="admin-customer-search">
             <Search size={19} />
+
             <input
               type="search"
               placeholder="Search name, email, business or message..."
@@ -647,6 +818,7 @@ export default function AdminDashboard() {
               onChange={(event) => setEnquirySearch(event.target.value)}
               aria-label="Search enquiries"
             />
+
             {enquirySearch && (
               <button
                 type="button"
@@ -660,6 +832,7 @@ export default function AdminDashboard() {
 
           <label className="admin-filter">
             <Filter size={17} />
+
             <select
               value={statusFilter}
               onChange={(event) =>
@@ -676,30 +849,112 @@ export default function AdminDashboard() {
         </div>
 
         {loading ? (
-          <div className="admin-empty">Loading enquiries...</div>
+          <div className="admin-empty">
+            Loading enquiries...
+          </div>
         ) : filteredEnquiries.length === 0 ? (
           <div className="admin-empty">
             <Inbox size={30} />
             <h3>No enquiries found</h3>
-            <p>Try changing your search or status filter.</p>
+            <p>
+              Try changing your search or status filter.
+            </p>
           </div>
         ) : (
           <div className="admin-enquiry-list">
             {filteredEnquiries.map((item) => (
-              <article className="admin-enquiry" key={item.id}>
+              <article
+                className="admin-enquiry"
+                key={item.id}
+              >
                 <div className="admin-enquiry-top">
                   <div>
-                    <h3>{item.name || 'Unnamed customer'}</h3>
-                    <a href={`mailto:${item.email}`}>{item.email}</a>
-                    {item.business && <span>{item.business}</span>}
+                    <h3>
+                      {item.name || 'Unnamed customer'}
+                    </h3>
+
+                    <a href={`mailto:${item.email}`}>
+                      {item.email}
+                    </a>
+
+                    {item.business && (
+                      <span>{item.business}</span>
+                    )}
                   </div>
 
-                  <span className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}>
+                  <span
+                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
+                  >
                     {item.status || 'Pending'}
                   </span>
                 </div>
 
-                <p className="admin-message">{item.message}</p>
+                <p className="admin-message">
+                  {item.message}
+                </p>
+
+                {/* Customer reply area */}
+                {replyingTo === item.id ? (
+                  <div className="admin-reply-box">
+                    <div className="admin-reply-heading">
+                      <strong>
+                        Reply to {item.name || 'customer'}
+                      </strong>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => {
+                          setReplyingTo('')
+                          setReplyMessage('')
+                        }}
+                        disabled={sendingReply}
+                        aria-label="Close reply"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    <p>To: {item.email}</p>
+
+                    <textarea
+                      value={replyMessage}
+                      onChange={(event) =>
+                        setReplyMessage(event.target.value)
+                      }
+                      placeholder="Write your response to this customer..."
+                      rows={5}
+                      disabled={sendingReply}
+                    />
+
+                    <button
+                      type="button"
+                      className="admin-button"
+                      onClick={() => sendCustomerReply(item)}
+                      disabled={sendingReply || !replyMessage.trim()}
+                    >
+                      <Send size={16} />
+                      {sendingReply
+                        ? 'Sending reply...'
+                        : 'Send email reply'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="admin-button"
+                    onClick={() => {
+                      setReplyingTo(item.id)
+                      setReplyMessage('')
+                      setError('')
+                      setSuccess('')
+                    }}
+                    disabled={!item.email}
+                  >
+                    <Mail size={16} />
+                    Reply to customer
+                  </button>
+                )}
 
                 <div className="admin-enquiry-bottom">
                   <small>
@@ -709,6 +964,7 @@ export default function AdminDashboard() {
 
                   <label>
                     Status
+
                     <select
                       value={item.status || 'Pending'}
                       disabled={updating === item.id}
@@ -723,7 +979,10 @@ export default function AdminDashboard() {
                       <option value="Contacted">Contacted</option>
                       <option value="Completed">Completed</option>
                     </select>
-                    {updating === item.id && <small>Saving...</small>}
+
+                    {updating === item.id && (
+                      <small>Saving...</small>
+                    )}
                   </label>
                 </div>
               </article>
