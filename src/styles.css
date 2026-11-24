@@ -2500,8 +2500,8 @@ h2 em {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0b0d10;
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--text);
   animation: rexLoaderExit 1.6s ease forwards;
 }
 
