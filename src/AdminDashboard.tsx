@@ -166,8 +166,11 @@ export default function AdminDashboard() {
   const { user, ready: authReady } = useAuth()
 
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
+const [customers, setCustomers] = useState<Customer[]>([])
+const [reviews, setReviews] = useState<Review[]>([])
 
+const [reviewsLoading, setReviewsLoading] = useState(true)
+const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
   const [loading, setLoading] = useState(true)
   const [customersLoading, setCustomersLoading] = useState(true)
 
