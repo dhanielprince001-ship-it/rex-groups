@@ -2489,9 +2489,9 @@ h2 em {
     animation: none !important;
   }
 }
-/* =================================
+/* =====================================
    REX GROUPS PREMIUM LOADING SCREEN
-================================= */
+===================================== */
 
 .rex-loader {
   position: fixed;
@@ -2517,16 +2517,17 @@ h2 em {
   display: grid;
   place-items: center;
   margin: 0 auto 25px;
-  border: 1px solid rgba(242, 140, 40, 0.5);
+  border: 1px solid var(--accentInk);
   border-radius: 22px;
   font-size: 42px;
   font-weight: 800;
-  box-shadow: 0 0 35px rgba(242, 140, 40, 0.12);
+  color: var(--text);
+  box-shadow: 0 0 35px color-mix(in srgb, var(--accent) 15%, transparent);
   animation: loaderGlow 1.5s ease-in-out infinite alternate;
 }
 
 .loader-logo span {
-  color: #f28c28;
+  color: var(--accentInk);
 }
 
 .loader-content h2 {
@@ -2538,7 +2539,7 @@ h2 em {
 
 .loader-content p {
   margin: 12px 0 35px;
-  color: #999da5;
+  color: var(--muted);
   font-size: 9px;
   letter-spacing: 2px;
 }
@@ -2548,42 +2549,36 @@ h2 em {
   height: 3px;
   overflow: hidden;
   border-radius: 10px;
-  background: #292d33;
+  background: var(--line);
 }
 
 .loader-progress {
-  width: 35%;
+  width: 0;
   height: 100%;
   border-radius: 10px;
-  background: #f28c28;
+  background: var(--accent);
   animation: loaderProgress 1.3s ease-in-out forwards;
 }
 
 .loader-caption {
   display: block;
   margin-top: 18px;
-  color: #777e87;
+  color: var(--muted);
   font-size: 9px;
   letter-spacing: 3px;
 }
 
 @keyframes loaderProgress {
-  from {
-    width: 0;
-  }
-
-  to {
-    width: 100%;
-  }
+  from { width: 0; }
+  to { width: 100%; }
 }
 
 @keyframes loaderGlow {
   from {
-    box-shadow: 0 0 15px rgba(242, 140, 40, 0.08);
+    box-shadow: 0 0 15px color-mix(in srgb, var(--accent) 8%, transparent);
   }
-
   to {
-    box-shadow: 0 0 40px rgba(242, 140, 40, 0.3);
+    box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 30%, transparent);
   }
 }
 
@@ -2592,7 +2587,6 @@ h2 em {
     opacity: 0;
     transform: translateY(15px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2604,7 +2598,6 @@ h2 em {
     opacity: 1;
     visibility: visible;
   }
-
   100% {
     opacity: 0;
     visibility: hidden;
@@ -2619,4 +2612,3 @@ h2 em {
     animation-duration: 0.01ms !important;
   }
 }
-
