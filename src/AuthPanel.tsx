@@ -23,7 +23,7 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
+  runTransaction,
   serverTimestamp,
   collection,
   query,
@@ -118,7 +118,6 @@ async function syncCustomerProfile(user: User) {
   }
 
   const profileRef = doc(firestore, 'profiles', user.uid)
-  const existingProfile = await getDoc(profileRef)
 
   const profileData = {
     uid: user.uid,
@@ -128,20 +127,25 @@ async function syncCustomerProfile(user: User) {
     provider: user.providerData[0]?.providerId || 'unknown',
   }
 
-  if (existingProfile.exists()) {
-    await updateDoc(profileRef, {
-      ...profileData,
-      lastSignInAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    })
-  } else {
-    await setDoc(profileRef, {
-      ...profileData,
-      phone: '',
-      createdAt: serverTimestamp(),
-      lastSignInAt: serverTimestamp(),
-    })
-  }
+  // A transaction keeps concurrent syncs (listener + register) from racing.
+  await runTransaction(firestore, async (tx) => {
+    const snap = await tx.get(profileRef)
+
+    if (snap.exists()) {
+      tx.update(profileRef, {
+        ...profileData,
+        lastSignInAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    } else {
+      tx.set(profileRef, {
+        ...profileData,
+        phone: '',
+        createdAt: serverTimestamp(),
+        lastSignInAt: serverTimestamp(),
+      })
+    }
+  })
 }
 
 // AUTHENTICATION PROVIDER
@@ -164,17 +168,16 @@ export function AuthProvider({
 
     const unsubscribe = onAuthStateChanged(
       auth,
-      async (nextUser) => {
-        if (nextUser) {
-          try {
-            await syncCustomerProfile(nextUser)
-          } catch (error) {
-            console.error('Customer profile sync failed:', error)
-          }
-        }
-
+      (nextUser) => {
+        // Never block the UI on Firestore: set the user first, sync after.
         setUser(nextUser)
         setReady(true)
+
+        if (nextUser) {
+          void syncCustomerProfile(nextUser).catch((error) => {
+            console.error('Customer profile sync failed:', error)
+          })
+        }
       },
       (error) => {
         setNotice(
@@ -452,11 +455,15 @@ function AccountCenter({ user }: { user: User }) {
         displayName: name.trim(),
       })
 
-      await updateDoc(profileRef, {
-        name: name.trim(),
-        phone: phone.trim(),
-        updatedAt: serverTimestamp(),
-      })
+      await setDoc(
+        profileRef,
+        {
+          name: name.trim(),
+          phone: phone.trim(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
 
       setNotice('Your account details have been updated.')
     } catch (error) {
@@ -626,13 +633,11 @@ export function AuthSection() {
 
         setNotice('Your account has been created.')
       } else {
-        const result = await signInWithEmailAndPassword(
+        await signInWithEmailAndPassword(
           auth,
           email.trim(),
           password,
         )
-
-        await syncCustomerProfile(result.user)
 
         setNotice('You have signed in successfully.')
       }
@@ -660,7 +665,6 @@ export function AuthSection() {
       )
 
       await result.user.reload()
-      await syncCustomerProfile(result.user)
 
       setNotice(
         `Welcome, ${
