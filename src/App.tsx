@@ -910,7 +910,9 @@ function App() {
           </div>
         </section>
 
-        <AuthSection />
+                <AuthSection />
+
+        <Reviews />
 
         <AdminDashboard />
       </main>
