@@ -99,9 +99,10 @@ function friendlyError(error: unknown, fallback: string): string {
 }
 
 async function syncCustomerProfile(user: User) {
-  if (!db) return
+  const firestore = db
+  if (!firestore) return
 
-  const profileRef = doc(db, 'profiles', user.uid)
+  const profileRef = doc(firestore, 'profiles', user.uid)
   const existingProfile = await getDoc(profileRef)
 
   const profileData = {
@@ -253,14 +254,16 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!db) {
+    const firestore = db
+
+    if (!firestore) {
       setError('Enquiry history is currently unavailable.')
       setLoading(false)
       return
     }
 
     const enquiriesQuery = query(
-      collection(db, 'enquiries'),
+      collection(firestore, 'enquiries'),
       where('userId', '==', user.uid),
     )
 
@@ -352,11 +355,14 @@ function AccountCenter({ user }: { user: User }) {
   const label = user.displayName || user.email || 'Your account'
 
   useEffect(() => {
-    if (!db) return
+    const firestore = db
+    if (!firestore) return
 
     const loadProfile = async () => {
       try {
-        const profile = await getDoc(doc(db, 'profiles', user.uid))
+        const profile = await getDoc(
+          doc(firestore, 'profiles', user.uid),
+        )
 
         if (profile.exists()) {
           setPhone(profile.data().phone || '')
@@ -377,7 +383,9 @@ function AccountCenter({ user }: { user: User }) {
       return
     }
 
-    if (!db) {
+    const firestore = db
+
+    if (!firestore) {
       setNotice('Your profile service is unavailable.')
       return
     }
@@ -390,11 +398,14 @@ function AccountCenter({ user }: { user: User }) {
         displayName: name.trim(),
       })
 
-      await updateDoc(doc(db, 'profiles', user.uid), {
-        name: name.trim(),
-        phone: phone.trim(),
-        updatedAt: serverTimestamp(),
-      })
+      await updateDoc(
+        doc(firestore, 'profiles', user.uid),
+        {
+          name: name.trim(),
+          phone: phone.trim(),
+          updatedAt: serverTimestamp(),
+        },
+      )
 
       setNotice('Your account details have been updated.')
     } catch (error) {
