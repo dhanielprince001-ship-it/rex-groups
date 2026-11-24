@@ -18,7 +18,6 @@ import {
   RefreshCw,
   BarChart3,
   Activity,
-  CalendarDays,
 } from 'lucide-react'
 
 import { auth, db } from './firebase'
