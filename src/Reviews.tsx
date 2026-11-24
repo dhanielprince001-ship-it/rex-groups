@@ -4,9 +4,9 @@ import {
   addDoc,
   collection,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
+  where,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { Star, MessageSquare, Send } from 'lucide-react'
@@ -30,22 +30,25 @@ export default function Reviews() {
   useEffect(() => {
     if (!db) return
 
+    // Only request approved reviews: pending ones contain private emails.
     const reviewsQuery = query(
       collection(db, 'reviews'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'Approved')
     )
 
     const unsubscribe = onSnapshot(
       reviewsQuery,
       (snapshot) => {
         const approvedReviews = snapshot.docs
-          .filter((item) => item.data().status === 'Approved')
           .map((item) => ({
             id: item.id,
             name: item.data().name || 'Customer',
             rating: item.data().rating || 5,
             comment: item.data().comment || '',
+            time: item.data().createdAt?.toMillis?.() ?? Date.now(),
           }))
+          .sort((a, b) => b.time - a.time)
+          .map(({ time: _time, ...review }) => review)
 
         setReviews(approvedReviews)
       },
