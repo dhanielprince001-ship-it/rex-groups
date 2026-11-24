@@ -8,6 +8,7 @@ import {
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { AuthButton, AuthSection } from './AuthPanel'
+import AdminDashboard from './AdminDashboard'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
@@ -17,6 +18,7 @@ const SOCIALS = [
   { label: 'LinkedIn', href: '', icon: Linkedin },
   { label: 'Instagram', href: '', icon: Instagram },
   { label: 'GitHub', href: '', icon: Github },
+  { label: 'Admin', href: '#admin' },
 ]
 
 const NAV_LINKS = [
