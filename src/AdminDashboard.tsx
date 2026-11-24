@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore'
+
 import {
   ShieldCheck,
   Inbox,
@@ -84,6 +85,20 @@ type Review = {
   adminReply?: string
   adminReplyAt?: { toDate: () => Date }
   createdAt?: { toDate: () => Date }
+}
+
+type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
+
+type Store = {
+  id: string
+  ownerId: string
+  ownerName: string
+  name: string
+  description: string
+  category: string
+  status: StoreStatus
+  createdAt?: { toDate: () => Date }
+  updatedAt?: { toDate: () => Date }
 }
 
 function safeDate(value?: { toDate: () => Date }): Date | null {
@@ -166,8 +181,11 @@ export default function AdminDashboard() {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+  const [stores, setStores] = useState<Store[]>([])
 
   const [reviewsLoading, setReviewsLoading] = useState(true)
+  const [storesLoading, setStoresLoading] = useState(true)
+
   const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
   const [loading, setLoading] = useState(true)
   const [customersLoading, setCustomersLoading] = useState(true)
@@ -215,15 +233,19 @@ export default function AdminDashboard() {
     })
   }, [enquiries, enquirySearch, statusFilter])
 
-  // Load enquiries, customers and reviews
+  // Load enquiries, customers, reviews and stores
   useEffect(() => {
     if (!authReady || !isAdmin) {
       setLoading(false)
       setCustomersLoading(false)
       setReviewsLoading(false)
+      setStoresLoading(false)
+
       setEnquiries([])
       setCustomers([])
       setReviews([])
+      setStores([])
+
       return
     }
 
@@ -231,15 +253,19 @@ export default function AdminDashboard() {
 
     if (!firestore) {
       setError('Firestore is not initialized. Check Firebase configuration.')
+
       setLoading(false)
       setCustomersLoading(false)
       setReviewsLoading(false)
+      setStoresLoading(false)
+
       return
     }
 
     setLoading(true)
     setCustomersLoading(true)
     setReviewsLoading(true)
+    setStoresLoading(true)
     setError('')
 
     const enquiriesQuery = query(
@@ -257,6 +283,11 @@ export default function AdminDashboard() {
       orderBy('createdAt', 'desc'),
     )
 
+    const storesQuery = query(
+      collection(firestore, 'stores'),
+      orderBy('createdAt', 'desc'),
+    )
+
     const unsubscribeEnquiries = onSnapshot(
       enquiriesQuery,
       (snapshot) => {
@@ -266,6 +297,7 @@ export default function AdminDashboard() {
             ...item.data(),
           })) as Enquiry[],
         )
+
         setLoading(false)
       },
       (err) => {
@@ -284,6 +316,7 @@ export default function AdminDashboard() {
             ...item.data(),
           })) as Customer[],
         )
+
         setCustomersLoading(false)
       },
       (err) => {
@@ -302,6 +335,7 @@ export default function AdminDashboard() {
             ...item.data(),
           })) as Review[],
         )
+
         setReviewsLoading(false)
       },
       (err) => {
@@ -311,10 +345,30 @@ export default function AdminDashboard() {
       },
     )
 
+    const unsubscribeStores = onSnapshot(
+      storesQuery,
+      (snapshot) => {
+        setStores(
+          snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as Store[],
+        )
+
+        setStoresLoading(false)
+      },
+      (err) => {
+        console.error('Stores error:', err)
+        setError('Unable to load store applications. Check Firestore rules.')
+        setStoresLoading(false)
+      },
+    )
+
     return () => {
       unsubscribeEnquiries()
       unsubscribeCustomers()
       unsubscribeReviews()
+      unsubscribeStores()
     }
   }, [authReady, isAdmin])
 
@@ -332,6 +386,7 @@ export default function AdminDashboard() {
         status,
         updatedAt: serverTimestamp(),
       })
+
       setSuccess('Enquiry status updated successfully.')
     } catch (err) {
       console.error('Status update failed:', err)
@@ -355,6 +410,7 @@ export default function AdminDashboard() {
         status,
         updatedAt: serverTimestamp(),
       })
+
       setSuccess(`Review marked as ${status.toLowerCase()}.`)
     } catch (err) {
       console.error('Review update failed:', err)
@@ -364,10 +420,39 @@ export default function AdminDashboard() {
     }
   }
 
+  // Approve, reject or suspend a store
+  async function changeStoreStatus(id: string, status: StoreStatus) {
+    const firestore = db
+
+    if (!firestore || !isAdmin) {
+      setError('Administrator permission is required.')
+      return
+    }
+
+    setUpdating(id)
+    setError('')
+    setSuccess('')
+
+    try {
+      await updateDoc(doc(firestore, 'stores', id), {
+        status,
+        updatedAt: serverTimestamp(),
+      })
+
+      setSuccess(`Store successfully marked as ${status.toLowerCase()}.`)
+    } catch (err) {
+      console.error('Store status update failed:', err)
+      setError('Could not update this store. Please try again.')
+    } finally {
+      setUpdating('')
+    }
+  }
+
   // Delete a review
   async function removeReview(id: string) {
     const firestore = db
     if (!firestore || !isAdmin) return
+
     if (!window.confirm('Delete this review permanently?')) return
 
     setUpdating(id)
@@ -447,6 +532,7 @@ export default function AdminDashboard() {
         adminReply: '',
         adminReplyAt: null,
       })
+
       setSuccess('Company reply removed.')
     } catch (err) {
       console.error('Removing review reply failed:', err)
@@ -577,9 +663,13 @@ export default function AdminDashboard() {
     ? Math.round((completed / enquiries.length) * 100)
     : 0
 
-  // Six-month analytics
+  const pendingStores = stores.filter(
+    (store) => store.status === 'Pending',
+  ).length
+
   const now = new Date()
 
+  // Six-month analytics
   const monthlyData = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(
       now.getFullYear(),
@@ -704,6 +794,98 @@ export default function AdminDashboard() {
             <strong>{customers.length}</strong>
           </div>
         </div>
+
+        {/* Marketplace store approvals */}
+        <div className="admin-list-heading">
+          <div>
+            <span className="section-kicker">MARKETPLACE MANAGEMENT</span>
+            <h3>Store applications</h3>
+            <p>Review seller applications and manage approved stores.</p>
+          </div>
+
+          <span>
+            {pendingStores} pending · {stores.length} total
+          </span>
+        </div>
+
+        {storesLoading ? (
+          <div className="admin-empty">Loading store applications...</div>
+        ) : stores.length === 0 ? (
+          <div className="admin-empty">
+            <Inbox size={30} />
+            <h3>No store applications yet</h3>
+            <p>New seller applications will appear here.</p>
+          </div>
+        ) : (
+          <div className="admin-enquiry-list">
+            {stores.map((store) => {
+              const status = store.status || 'Pending'
+
+              return (
+                <article className="admin-enquiry" key={store.id}>
+                  <div className="admin-enquiry-top">
+                    <div>
+                      <h3>{store.name || 'Unnamed store'}</h3>
+                      <span>Owner: {store.ownerName || 'Unknown seller'}</span>
+                      <span>Category: {store.category || 'Not specified'}</span>
+                      <span>Store ID: {store.id}</span>
+                    </div>
+
+                    <span className={`admin-status ${status.toLowerCase()}`}>
+                      {status}
+                    </span>
+                  </div>
+
+                  <p className="admin-message">
+                    {store.description || 'No store description provided.'}
+                  </p>
+
+                  <div className="admin-enquiry-bottom">
+                    <small>
+                      Applied: {formatDate(store.createdAt)}
+                    </small>
+
+                    <div className="admin-report-actions">
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => changeStoreStatus(store.id, 'Approved')}
+                        disabled={updating === store.id || status === 'Approved'}
+                      >
+                        <CheckCircle2 size={16} />
+                        Approve
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => changeStoreStatus(store.id, 'Rejected')}
+                        disabled={updating === store.id || status === 'Rejected'}
+                      >
+                        <X size={16} />
+                        Reject
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => changeStoreStatus(store.id, 'Suspended')}
+                        disabled={updating === store.id || status === 'Suspended'}
+                      >
+                        <ShieldCheck size={16} />
+                        Suspend
+                      </button>
+                    </div>
+                  </div>
+
+                  {updating === store.id && (
+                    <small>Updating store status...</small>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        )}
 
         {/* Analytics */}
         <div className="admin-analytics-grid">
@@ -932,7 +1114,6 @@ export default function AdminDashboard() {
 
                   <p className="admin-message">{review.comment}</p>
 
-                  {/* Existing published company reply */}
                   {review.adminReply && (
                     <div className="admin-company-reply">
                       <strong><MessageSquare size={16} /> Rex Groups response</strong>
@@ -943,7 +1124,6 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* Reply editor */}
                   {status === 'Approved' && (
                     <div className="admin-review-reply-area">
                       {isEditingReply ? (
