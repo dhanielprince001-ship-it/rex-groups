@@ -44,25 +44,43 @@ export default function AdminDashboard() {
 
   const isAdmin = user?.uid === ADMIN_UID
 
+  // Safely monitor Firebase authentication
   useEffect(() => {
-    return onAuthStateChanged(auth, (currentUser) => {
+    if (!auth) {
+      setUser(null)
+      setAuthReady(true)
+      return
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setAuthReady(true)
     })
+
+    return unsubscribe
   }, [])
 
+  // Load enquiries only for the administrator
   useEffect(() => {
-    if (!authReady || !isAdmin || !db) {
+    if (!authReady || !isAdmin) {
       setLoading(false)
       setEnquiries([])
       return
     }
 
+    if (!db) {
+      setError('Firestore is not initialized. Check your Firebase configuration.')
+      setLoading(false)
+      return
+    }
+
+    const firestore = db
+
     setLoading(true)
     setError('')
 
     const enquiriesQuery = query(
-      collection(db, 'enquiries'),
+      collection(firestore, 'enquiries'),
       orderBy('createdAt', 'desc'),
     )
 
@@ -79,7 +97,9 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error('Dashboard error:', err)
-        setError('Unable to load enquiries. Check your connection and Firestore rules.')
+        setError(
+          'Unable to load enquiries. Check your connection and Firestore rules.',
+        )
         setLoading(false)
       },
     )
@@ -87,14 +107,20 @@ export default function AdminDashboard() {
     return unsubscribe
   }, [authReady, isAdmin])
 
-  async function changeStatus(id: string, status: Enquiry['status']) {
+  // Update an enquiry's status
+  async function changeStatus(
+    id: string,
+    status: Enquiry['status'],
+  ) {
     if (!db || !isAdmin || !status) return
+
+    const firestore = db
 
     setUpdating(id)
     setError('')
 
     try {
-      await updateDoc(doc(db, 'enquiries', id), {
+      await updateDoc(doc(firestore, 'enquiries', id), {
         status,
         updatedAt: serverTimestamp(),
       })
@@ -109,7 +135,9 @@ export default function AdminDashboard() {
   if (!authReady) {
     return (
       <section className="admin-section" id="admin">
-        <div className="admin-card">Checking administrator access...</div>
+        <div className="admin-card">
+          Checking administrator access...
+        </div>
       </section>
     )
   }
@@ -120,8 +148,12 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Administrator access</h2>
-          <p>Please sign in with your administrator account to continue.</p>
-          <a href="#account" className="admin-button">Go to sign in</a>
+          <p>
+            Please sign in with your administrator account to continue.
+          </p>
+          <a href="#account" className="admin-button">
+            Go to sign in
+          </a>
         </div>
       </section>
     )
@@ -133,7 +165,9 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Access restricted</h2>
-          <p>This account does not have administrator permission.</p>
+          <p>
+            This account does not have administrator permission.
+          </p>
         </div>
       </section>
     )
@@ -156,10 +190,17 @@ export default function AdminDashboard() {
       <div className="section-wrap">
         <div className="admin-heading">
           <div>
-            <span className="section-kicker">REX GROUPS — CONTROL CENTRE</span>
-            <h2>Admin <em>dashboard.</em></h2>
-            <p>Welcome, administrator. Manage your business enquiries here.</p>
+            <span className="section-kicker">
+              REX GROUPS — CONTROL CENTRE
+            </span>
+            <h2>
+              Admin <em>dashboard.</em>
+            </h2>
+            <p>
+              Welcome, administrator. Manage your business enquiries here.
+            </p>
           </div>
+
           <span className="admin-secure">
             <ShieldCheck size={16} /> Secure access
           </span>
@@ -194,15 +235,24 @@ export default function AdminDashboard() {
         <div className="admin-list-heading">
           <div>
             <h3>Customer enquiries</h3>
-            <p>Messages submitted through your website contact form.</p>
+            <p>
+              Messages submitted through your website contact form.
+            </p>
           </div>
+
           <span>{enquiries.length} records</span>
         </div>
 
-        {error && <p className="admin-error" role="alert">{error}</p>}
+        {error && (
+          <p className="admin-error" role="alert">
+            {error}
+          </p>
+        )}
 
         {loading ? (
-          <div className="admin-empty">Loading enquiries...</div>
+          <div className="admin-empty">
+            Loading enquiries...
+          </div>
         ) : enquiries.length === 0 ? (
           <div className="admin-empty">
             <Inbox size={30} />
@@ -216,16 +266,26 @@ export default function AdminDashboard() {
                 <div className="admin-enquiry-top">
                   <div>
                     <h3>{item.name || 'Unnamed customer'}</h3>
-                    <a href={`mailto:${item.email}`}>{item.email}</a>
-                    {item.business && <span>{item.business}</span>}
+
+                    <a href={`mailto:${item.email}`}>
+                      {item.email}
+                    </a>
+
+                    {item.business && (
+                      <span>{item.business}</span>
+                    )}
                   </div>
 
-                  <span className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}>
+                  <span
+                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
+                  >
                     {item.status || 'Pending'}
                   </span>
                 </div>
 
-                <p className="admin-message">{item.message}</p>
+                <p className="admin-message">
+                  {item.message}
+                </p>
 
                 <div className="admin-enquiry-bottom">
                   <small>
@@ -236,6 +296,7 @@ export default function AdminDashboard() {
 
                   <label>
                     Status
+
                     <select
                       value={item.status || 'Pending'}
                       disabled={updating === item.id}
