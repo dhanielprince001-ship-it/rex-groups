@@ -69,22 +69,31 @@ function friendlyError(error: unknown, fallback: string): string {
     case 'auth/wrong-password':
     case 'auth/user-not-found':
       return 'Incorrect email or password.'
+
     case 'auth/email-already-in-use':
       return 'This email already has an account. Please sign in.'
+
     case 'auth/weak-password':
       return 'Password must contain at least 6 characters.'
+
     case 'auth/invalid-email':
       return 'Please enter a valid email address.'
+
     case 'auth/too-many-requests':
       return 'Too many attempts. Please wait and try again.'
+
     case 'auth/unauthorized-domain':
       return `Firebase rejected this domain: ${window.location.hostname}. Add it under Firebase Authentication > Settings > Authorized domains.`
+
     case 'auth/popup-blocked':
       return 'Your browser blocked the Google sign-in window.'
+
     case 'auth/popup-closed-by-user':
       return 'Google sign-in was closed before completion.'
+
     case 'auth/network-request-failed':
       return 'Network error. Check your internet connection.'
+
     default:
       if (
         typeof error === 'object' &&
@@ -98,9 +107,15 @@ function friendlyError(error: unknown, fallback: string): string {
   }
 }
 
+// CUSTOMER PROFILE SYNCHRONISATION
+
 async function syncCustomerProfile(user: User) {
   const firestore = db
-  if (!firestore) return
+
+  if (!firestore) {
+    console.warn('Firestore is not configured. Profile sync skipped.')
+    return
+  }
 
   const profileRef = doc(firestore, 'profiles', user.uid)
   const existingProfile = await getDoc(profileRef)
@@ -128,6 +143,8 @@ async function syncCustomerProfile(user: User) {
     })
   }
 }
+
+// AUTHENTICATION PROVIDER
 
 export function AuthProvider({
   children,
@@ -160,7 +177,9 @@ export function AuthProvider({
         setReady(true)
       },
       (error) => {
-        setNotice(friendlyError(error, 'Could not check your account.'))
+        setNotice(
+          friendlyError(error, 'Could not check your account.'),
+        )
         setReady(true)
       },
     )
@@ -196,6 +215,8 @@ export function AuthProvider({
   )
 }
 
+// AUTH BUTTON
+
 export function AuthButton({
   onOpen,
 }: {
@@ -213,6 +234,8 @@ export function AuthButton({
     </div>
   )
 }
+
+// ACCOUNT HELPERS
 
 function providerLabel(user: User) {
   const id = user.providerData[0]?.providerId
@@ -236,6 +259,8 @@ function formatDate(value?: string) {
         day: 'numeric',
       })
 }
+
+// CUSTOMER ENQUIRY HISTORY
 
 type CustomerEnquiry = {
   id: string
@@ -278,6 +303,7 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
         results.sort((a, b) => {
           const dateA = a.createdAt?.toDate().getTime() || 0
           const dateB = b.createdAt?.toDate().getTime() || 0
+
           return dateB - dateA
         })
 
@@ -314,7 +340,8 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
             let date = 'Date unavailable'
 
             try {
-              date = item.createdAt?.toDate().toLocaleDateString() || date
+              date =
+                item.createdAt?.toDate().toLocaleDateString() || date
             } catch {
               // Keep fallback date
             }
@@ -322,14 +349,22 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
             const status = item.status || 'Pending'
 
             return (
-              <article className="account-enquiry" key={item.id}>
+              <article
+                className="account-enquiry"
+                key={item.id}
+              >
                 <div>
-                  <strong>{item.business || 'General enquiry'}</strong>
+                  <strong>
+                    {item.business || 'General enquiry'}
+                  </strong>
+
                   <p>{item.message}</p>
                   <small>{date}</small>
                 </div>
 
-                <span className={`admin-status ${status.toLowerCase()}`}>
+                <span
+                  className={`admin-status ${status.toLowerCase()}`}
+                >
                   {status}
                 </span>
               </article>
@@ -340,6 +375,8 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
     </div>
   )
 }
+
+// CUSTOMER ACCOUNT CENTRE
 
 function AccountCenter({ user }: { user: User }) {
   const { setNotice, signOutUser } = useAuth()
@@ -352,30 +389,41 @@ function AccountCenter({ user }: { user: User }) {
     (p) => p.providerId === 'password',
   )
 
-  const label = user.displayName || user.email || 'Your account'
+  const label =
+    user.displayName || user.email || 'Your account'
 
   useEffect(() => {
     const firestore = db
+
     if (!firestore) return
 
     const loadProfile = async () => {
       try {
-        const profile = await getDoc(
-          doc(firestore, 'profiles', user.uid),
+        const profileRef = doc(
+          firestore,
+          'profiles',
+          user.uid,
         )
+
+        const profile = await getDoc(profileRef)
 
         if (profile.exists()) {
           setPhone(profile.data().phone || '')
         }
       } catch (error) {
-        console.error('Could not load customer profile:', error)
+        console.error(
+          'Could not load customer profile:',
+          error,
+        )
       }
     }
 
     void loadProfile()
   }, [user.uid])
 
-  async function saveDetails(e: FormEvent<HTMLFormElement>) {
+  async function saveDetails(
+    e: FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault()
 
     if (!name.trim()) {
@@ -394,22 +442,30 @@ function AccountCenter({ user }: { user: User }) {
     setNotice('')
 
     try {
+      const profileRef = doc(
+        firestore,
+        'profiles',
+        user.uid,
+      )
+
       await updateProfile(user, {
         displayName: name.trim(),
       })
 
-      await updateDoc(
-        doc(firestore, 'profiles', user.uid),
-        {
-          name: name.trim(),
-          phone: phone.trim(),
-          updatedAt: serverTimestamp(),
-        },
-      )
+      await updateDoc(profileRef, {
+        name: name.trim(),
+        phone: phone.trim(),
+        updatedAt: serverTimestamp(),
+      })
 
       setNotice('Your account details have been updated.')
     } catch (error) {
-      setNotice(friendlyError(error, 'Could not update your details.'))
+      setNotice(
+        friendlyError(
+          error,
+          'Could not update your details.',
+        ),
+      )
     } finally {
       setSaving(false)
     }
@@ -420,9 +476,14 @@ function AccountCenter({ user }: { user: User }) {
 
     try {
       await sendPasswordResetEmail(auth, user.email)
-      setNotice(`Password reset email sent to ${user.email}.`)
+
+      setNotice(
+        `Password reset email sent to ${user.email}.`,
+      )
     } catch (error) {
-      setNotice(friendlyError(error, 'Could not send reset email.'))
+      setNotice(
+        friendlyError(error, 'Could not send reset email.'),
+      )
     }
   }
 
@@ -437,12 +498,16 @@ function AccountCenter({ user }: { user: User }) {
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="account-avatar" aria-hidden="true">
+          <div
+            className="account-avatar"
+            aria-hidden="true"
+          >
             {label.charAt(0).toUpperCase()}
           </div>
         )}
 
         <h2>{label}</h2>
+
         {user.email && <p>{user.email}</p>}
       </div>
 
@@ -451,23 +516,30 @@ function AccountCenter({ user }: { user: User }) {
           <dt>Sign-in method</dt>
           <dd>{providerLabel(user)}</dd>
         </div>
+
         <div>
           <dt>Email verified</dt>
           <dd>{user.emailVerified ? 'Yes' : 'No'}</dd>
         </div>
+
         <div>
           <dt>Member since</dt>
           <dd>{formatDate(user.metadata.creationTime)}</dd>
         </div>
+
         <div>
           <dt>Last sign-in</dt>
           <dd>{formatDate(user.metadata.lastSignInTime)}</dd>
         </div>
       </dl>
 
-      <form onSubmit={saveDetails} className="account-edit-form">
+      <form
+        onSubmit={saveDetails}
+        className="account-edit-form"
+      >
         <label>
           Full name
+
           <input
             value={name}
             autoComplete="name"
@@ -479,6 +551,7 @@ function AccountCenter({ user }: { user: User }) {
 
         <label>
           Phone number
+
           <input
             type="tel"
             value={phone}
@@ -490,7 +563,9 @@ function AccountCenter({ user }: { user: User }) {
         </label>
 
         <button type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Save account details'}
+          {saving
+            ? 'Saving...'
+            : 'Save account details'}
         </button>
       </form>
 
@@ -509,6 +584,8 @@ function AccountCenter({ user }: { user: User }) {
   )
 }
 
+// MAIN AUTH SECTION
+
 export function AuthSection() {
   const { user, ready, notice, setNotice } = useAuth()
 
@@ -518,7 +595,9 @@ export function AuthSection() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    e: FormEvent<HTMLFormElement>,
+  ) {
     e.preventDefault()
 
     if (!auth) {
@@ -544,6 +623,7 @@ export function AuthSection() {
         }
 
         await syncCustomerProfile(result.user)
+
         setNotice('Your account has been created.')
       } else {
         const result = await signInWithEmailAndPassword(
@@ -553,12 +633,15 @@ export function AuthSection() {
         )
 
         await syncCustomerProfile(result.user)
+
         setNotice('You have signed in successfully.')
       }
 
       setPassword('')
     } catch (error) {
-      setNotice(friendlyError(error, 'Something went wrong.'))
+      setNotice(
+        friendlyError(error, 'Something went wrong.'),
+      )
     } finally {
       setLoading(false)
     }
@@ -571,15 +654,25 @@ export function AuthSection() {
     setNotice('Opening Google sign-in...')
 
     try {
-      const result = await signInWithPopup(auth, googleProvider)
+      const result = await signInWithPopup(
+        auth,
+        googleProvider,
+      )
+
       await result.user.reload()
       await syncCustomerProfile(result.user)
 
       setNotice(
-        `Welcome, ${result.user.displayName || result.user.email || 'you'}!`,
+        `Welcome, ${
+          result.user.displayName ||
+          result.user.email ||
+          'you'
+        }!`,
       )
     } catch (error) {
-      setNotice(friendlyError(error, 'Google sign-in failed.'))
+      setNotice(
+        friendlyError(error, 'Google sign-in failed.'),
+      )
     } finally {
       setLoading(false)
     }
@@ -595,7 +688,9 @@ export function AuthSection() {
       await sendPasswordResetEmail(auth, email.trim())
       setNotice('Password reset email sent.')
     } catch (error) {
-      setNotice(friendlyError(error, 'Could not send reset email.'))
+      setNotice(
+        friendlyError(error, 'Could not send reset email.'),
+      )
     }
   }
 
@@ -605,7 +700,9 @@ export function AuthSection() {
       id="account"
     >
       <div className="section-kicker">
-        {user ? '06 — ACCOUNT CENTER' : '06 — YOUR ACCOUNT'}
+        {user
+          ? '06 — ACCOUNT CENTER'
+          : '06 — YOUR ACCOUNT'}
       </div>
 
       <div className="account-card">
@@ -616,13 +713,15 @@ export function AuthSection() {
         ) : (
           <>
             <h2>
-              {mode === 'login' ? 'Welcome back' : 'Create your account'}
+              {mode === 'login'
+                ? 'Welcome back'
+                : 'Create your account'}
             </h2>
 
             {!auth && (
               <p role="alert">
-                Sign-in is unavailable because Firebase environment
-                variables are missing.
+                Sign-in is unavailable because Firebase
+                environment variables are missing.
               </p>
             )}
 
@@ -630,10 +729,13 @@ export function AuthSection() {
               {mode === 'register' && (
                 <label>
                   Full name
+
                   <input
                     value={name}
                     autoComplete="name"
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) =>
+                      setName(e.target.value)
+                    }
                     maxLength={100}
                     required
                   />
@@ -642,30 +744,41 @@ export function AuthSection() {
 
               <label>
                 Email address
+
                 <input
                   type="email"
                   value={email}
                   autoComplete="email"
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) =>
+                    setEmail(e.target.value)
+                  }
                   required
                 />
               </label>
 
               <label>
                 Password
+
                 <input
                   type="password"
                   value={password}
                   autoComplete={
-                    mode === 'login' ? 'current-password' : 'new-password'
+                    mode === 'login'
+                      ? 'current-password'
+                      : 'new-password'
                   }
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
                   minLength={6}
                   required
                 />
               </label>
 
-              <button type="submit" disabled={loading || !auth}>
+              <button
+                type="submit"
+                disabled={loading || !auth}
+              >
                 {loading
                   ? 'Please wait...'
                   : mode === 'login'
@@ -675,7 +788,10 @@ export function AuthSection() {
             </form>
 
             {mode === 'login' && (
-              <button type="button" onClick={handleReset}>
+              <button
+                type="button"
+                onClick={handleReset}
+              >
                 Forgot password?
               </button>
             )}
@@ -685,13 +801,20 @@ export function AuthSection() {
               onClick={handleGoogle}
               disabled={loading || !auth}
             >
-              {loading ? 'Connecting...' : 'Continue with Google'}
+              {loading
+                ? 'Connecting...'
+                : 'Continue with Google'}
             </button>
 
             <button
               type="button"
               onClick={() => {
-                setMode(mode === 'login' ? 'register' : 'login')
+                setMode(
+                  mode === 'login'
+                    ? 'register'
+                    : 'login',
+                )
+
                 setNotice('')
               }}
             >
