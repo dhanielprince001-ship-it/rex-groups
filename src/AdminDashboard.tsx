@@ -29,6 +29,9 @@ import {
   Send,
   Phone,
   Star,
+  MessageSquare,
+  Trash2,
+  Edit3,
 } from 'lucide-react'
 
 import { db } from './firebase'
@@ -55,9 +58,7 @@ type Enquiry = {
   source?: string
   message: string
   status?: EnquiryStatus
-  createdAt?: {
-    toDate: () => Date
-  }
+  createdAt?: { toDate: () => Date }
 }
 
 type Customer = {
@@ -67,12 +68,8 @@ type Customer = {
   email?: string
   photoURL?: string
   provider?: string
-  createdAt?: {
-    toDate: () => Date
-  }
-  lastSignInAt?: {
-    toDate: () => Date
-  }
+  createdAt?: { toDate: () => Date }
+  lastSignInAt?: { toDate: () => Date }
 }
 
 type ReviewStatus = 'Pending' | 'Approved' | 'Rejected'
@@ -84,9 +81,9 @@ type Review = {
   rating: number
   comment: string
   status: ReviewStatus
-  createdAt?: {
-    toDate: () => Date
-  }
+  adminReply?: string
+  adminReplyAt?: { toDate: () => Date }
+  createdAt?: { toDate: () => Date }
 }
 
 function safeDate(value?: { toDate: () => Date }): Date | null {
@@ -183,14 +180,18 @@ export default function AdminDashboard() {
   const [enquirySearch, setEnquirySearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('All')
 
-  // Customer reply state
+  // Customer email reply state
   const [replyingTo, setReplyingTo] = useState('')
   const [replyMessage, setReplyMessage] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
 
+  // Public review reply state
+  const [replyingToReview, setReplyingToReview] = useState('')
+  const [reviewReplyMessage, setReviewReplyMessage] = useState('')
+  const [savingReviewReply, setSavingReviewReply] = useState(false)
+
   const isAdmin = user?.uid === ADMIN_UID
 
-  // Filter enquiries
   const filteredEnquiries = useMemo(() => {
     const search = enquirySearch.trim().toLowerCase()
 
@@ -214,7 +215,7 @@ export default function AdminDashboard() {
     })
   }, [enquiries, enquirySearch, statusFilter])
 
-  // Load enquiries and customer profiles
+  // Load enquiries, customers and reviews
   useEffect(() => {
     if (!authReady || !isAdmin) {
       setLoading(false)
@@ -287,9 +288,7 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error('Customer profiles error:', err)
-        setError(
-          'Unable to load customers. Check your profiles collection rules.',
-        )
+        setError('Unable to load customers. Check your profiles collection rules.')
         setCustomersLoading(false)
       },
     )
@@ -322,7 +321,6 @@ export default function AdminDashboard() {
   // Update enquiry status
   async function changeStatus(id: string, status: EnquiryStatus) {
     const firestore = db
-
     if (!firestore || !isAdmin) return
 
     setUpdating(id)
@@ -334,7 +332,6 @@ export default function AdminDashboard() {
         status,
         updatedAt: serverTimestamp(),
       })
-
       setSuccess('Enquiry status updated successfully.')
     } catch (err) {
       console.error('Status update failed:', err)
@@ -344,10 +341,9 @@ export default function AdminDashboard() {
     }
   }
 
-  // Approve / reject a customer review
+  // Approve or reject a review
   async function changeReviewStatus(id: string, status: ReviewStatus) {
     const firestore = db
-
     if (!firestore || !isAdmin) return
 
     setUpdating(id)
@@ -359,7 +355,6 @@ export default function AdminDashboard() {
         status,
         updatedAt: serverTimestamp(),
       })
-
       setSuccess(`Review marked as ${status.toLowerCase()}.`)
     } catch (err) {
       console.error('Review update failed:', err)
@@ -369,9 +364,9 @@ export default function AdminDashboard() {
     }
   }
 
+  // Delete a review
   async function removeReview(id: string) {
     const firestore = db
-
     if (!firestore || !isAdmin) return
     if (!window.confirm('Delete this review permanently?')) return
 
@@ -385,6 +380,77 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Review delete failed:', err)
       setError('Could not delete this review. Please try again.')
+    } finally {
+      setUpdating('')
+    }
+  }
+
+  // Publish or update a company reply to a review
+  async function saveReviewReply(review: Review) {
+    const firestore = db
+    const message = reviewReplyMessage.trim()
+
+    if (!firestore || !isAdmin) {
+      setError('Administrator permission is required.')
+      return
+    }
+
+    if (review.status !== 'Approved') {
+      setError('Only approved reviews can receive public replies.')
+      return
+    }
+
+    if (!message) {
+      setError('Please write a reply before publishing.')
+      return
+    }
+
+    if (message.length > 1000) {
+      setError('Your reply must be 1,000 characters or fewer.')
+      return
+    }
+
+    setSavingReviewReply(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      await updateDoc(doc(firestore, 'reviews', review.id), {
+        adminReply: message,
+        adminReplyAt: serverTimestamp(),
+      })
+
+      setSuccess('Your company reply has been published.')
+      setReplyingToReview('')
+      setReviewReplyMessage('')
+    } catch (err) {
+      console.error('Review reply failed:', err)
+      setError('Could not publish the reply. Please try again.')
+    } finally {
+      setSavingReviewReply(false)
+    }
+  }
+
+  // Remove a published company reply
+  async function removeReviewReply(id: string) {
+    const firestore = db
+    if (!firestore || !isAdmin) return
+
+    if (!window.confirm('Remove this company reply?')) return
+
+    setUpdating(id)
+    setError('')
+    setSuccess('')
+
+    try {
+      await updateDoc(doc(firestore, 'reviews', id), {
+        adminReply: '',
+        adminReplyAt: null,
+      })
+      setSuccess('Company reply removed.')
+    } catch (err) {
+      console.error('Removing review reply failed:', err)
+      setError('Could not remove the company reply.')
     } finally {
       setUpdating('')
     }
@@ -418,9 +484,7 @@ export default function AdminDashboard() {
         'https://api.emailjs.com/api/v1.0/email/send',
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             service_id: EMAILJS_SERVICE_ID,
             template_id: EMAILJS_REPLY_TEMPLATE_ID,
@@ -457,53 +521,40 @@ export default function AdminDashboard() {
       setReplyingTo('')
     } catch (err) {
       console.error('Customer reply failed:', err)
-      setError(
-        'Unable to send the reply. Check your EmailJS template and settings.',
-      )
+      setError('Unable to send the reply. Check your EmailJS template and settings.')
     } finally {
       setSendingReply(false)
     }
   }
 
-  // Authentication loading
   if (!authReady) {
     return (
       <section className="admin-section" id="admin">
-        <div className="admin-card">
-          Checking administrator access...
-        </div>
+        <div className="admin-card">Checking administrator access...</div>
       </section>
     )
   }
 
-  // Signed-out users
   if (!user) {
     return (
       <section className="admin-section" id="admin">
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Administrator access</h2>
-          <p>
-            Please sign in with your administrator account to continue.
-          </p>
-          <a href="#account" className="admin-button">
-            Go to sign in
-          </a>
+          <p>Please sign in with your administrator account to continue.</p>
+          <a href="#account" className="admin-button">Go to sign in</a>
         </div>
       </section>
     )
   }
 
-  // Non-administrators
   if (!isAdmin) {
     return (
       <section className="admin-section" id="admin">
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Access restricted</h2>
-          <p>
-            This account does not have administrator permission.
-          </p>
+          <p>This account does not have administrator permission.</p>
         </div>
       </section>
     )
@@ -560,7 +611,6 @@ export default function AdminDashboard() {
   // Customer search
   const filteredCustomers = customers.filter((customer) => {
     const search = customerSearch.trim().toLowerCase()
-
     if (!search) return true
 
     return (
@@ -582,7 +632,6 @@ export default function AdminDashboard() {
     (review) => (review.status || 'Pending') === 'Pending',
   ).length
 
-  // Print business report
   function printReport() {
     window.print()
   }
@@ -590,19 +639,11 @@ export default function AdminDashboard() {
   return (
     <section className="admin-section" id="admin">
       <div className="section-wrap">
-
-        {/* Dashboard heading */}
         <div className="admin-heading">
           <div>
-            <span className="section-kicker">
-              REX GROUPS — CONTROL CENTRE
-            </span>
-            <h2>
-              Admin <em>dashboard.</em>
-            </h2>
-            <p>
-              Monitor customers, business enquiries and activity.
-            </p>
+            <span className="section-kicker">REX GROUPS — CONTROL CENTRE</span>
+            <h2>Admin <em>dashboard.</em></h2>
+            <p>Monitor customers, business enquiries and activity.</p>
           </div>
 
           <span className="admin-secure">
@@ -611,19 +652,9 @@ export default function AdminDashboard() {
           </span>
         </div>
 
-        {error && (
-          <p className="admin-error" role="alert">
-            {error}
-          </p>
-        )}
+        {error && <p className="admin-error" role="alert">{error}</p>}
+        {success && <p className="admin-success" role="status">{success}</p>}
 
-        {success && (
-          <p className="admin-success" role="status">
-            {success}
-          </p>
-        )}
-
-        {/* Report actions */}
         <div className="admin-report-actions">
           <button
             type="button"
@@ -635,11 +666,7 @@ export default function AdminDashboard() {
             Export enquiries CSV
           </button>
 
-          <button
-            type="button"
-            className="admin-button"
-            onClick={printReport}
-          >
+          <button type="button" className="admin-button" onClick={printReport}>
             <FileText size={17} />
             Print business report
           </button>
@@ -678,30 +705,22 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Performance analytics */}
+        {/* Analytics */}
         <div className="admin-analytics-grid">
           <div className="admin-analytics-card">
             <div className="admin-analytics-heading">
               <div>
-                <span className="section-kicker">
-                  PERFORMANCE
-                </span>
+                <span className="section-kicker">PERFORMANCE</span>
                 <h3>Enquiry overview</h3>
-                <p>
-                  Enquiries received over the last six months.
-                </p>
+                <p>Enquiries received over the last six months.</p>
               </div>
               <BarChart3 size={24} />
             </div>
 
             <div className="admin-chart">
               {monthlyData.map((month, index) => (
-                <div
-                  className="admin-chart-column"
-                  key={`${month.label}-${index}`}
-                >
+                <div className="admin-chart-column" key={`${month.label}-${index}`}>
                   <strong>{month.count}</strong>
-
                   <div className="admin-chart-track">
                     <div
                       className="admin-chart-bar"
@@ -713,7 +732,6 @@ export default function AdminDashboard() {
                       }}
                     />
                   </div>
-
                   <span>{month.label}</span>
                 </div>
               ))}
@@ -723,30 +741,22 @@ export default function AdminDashboard() {
           <div className="admin-analytics-card">
             <div className="admin-analytics-heading">
               <div>
-                <span className="section-kicker">
-                  BUSINESS RESULTS
-                </span>
+                <span className="section-kicker">BUSINESS RESULTS</span>
                 <h3>Completion rate</h3>
-                <p>
-                  Percentage of enquiries marked completed.
-                </p>
+                <p>Percentage of enquiries marked completed.</p>
               </div>
               <Activity size={24} />
             </div>
 
             <div className="admin-completion">
               <strong>{completionRate}%</strong>
-
               <div className="admin-completion-track">
                 <div
                   className="admin-completion-bar"
                   style={{ width: `${completionRate}%` }}
                 />
               </div>
-
-              <p>
-                {completed} completed out of {enquiries.length} enquiries.
-              </p>
+              <p>{completed} completed out of {enquiries.length} enquiries.</p>
             </div>
           </div>
         </div>
@@ -755,9 +765,7 @@ export default function AdminDashboard() {
         <div className="admin-analytics-card admin-recent-card">
           <div className="admin-analytics-heading">
             <div>
-              <span className="section-kicker">
-                LATEST UPDATES
-              </span>
+              <span className="section-kicker">LATEST UPDATES</span>
               <h3>Recent activity</h3>
               <p>Your five latest customer enquiries.</p>
             </div>
@@ -765,35 +773,21 @@ export default function AdminDashboard() {
           </div>
 
           {recentEnquiries.length === 0 ? (
-            <div className="admin-recent-empty">
-              No recent activity yet.
-            </div>
+            <div className="admin-recent-empty">No recent activity yet.</div>
           ) : (
             <div className="admin-recent-list">
               {recentEnquiries.map((item) => (
-                <div
-                  className="admin-recent-item"
-                  key={item.id}
-                >
-                  <div className="admin-recent-icon">
-                    <Inbox size={17} />
-                  </div>
-
+                <div className="admin-recent-item" key={item.id}>
+                  <div className="admin-recent-icon"><Inbox size={17} /></div>
                   <div className="admin-recent-info">
-                    <strong>
-                      {item.name || 'Unnamed customer'}
-                    </strong>
+                    <strong>{item.name || 'Unnamed customer'}</strong>
                     <span>{item.email}</span>
                     {item.phone && <span>{item.phone}</span>}
                     <small>
-                      {safeDate(item.createdAt)?.toLocaleString() ||
-                        'Date unavailable'}
+                      {safeDate(item.createdAt)?.toLocaleString() || 'Date unavailable'}
                     </small>
                   </div>
-
-                  <span
-                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
-                  >
+                  <span className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}>
                     {item.status || 'Pending'}
                   </span>
                 </div>
@@ -805,21 +799,15 @@ export default function AdminDashboard() {
         {/* Customer directory */}
         <div className="admin-list-heading">
           <div>
-            <span className="section-kicker">
-              CUSTOMER DIRECTORY
-            </span>
+            <span className="section-kicker">CUSTOMER DIRECTORY</span>
             <h3>Registered customers</h3>
-            <p>
-              View and search customer accounts registered with Rex Groups.
-            </p>
+            <p>View and search customer accounts registered with Rex Groups.</p>
           </div>
-
           <span>{customers.length} customers</span>
         </div>
 
         <div className="admin-customer-search">
           <Search size={19} />
-
           <input
             type="search"
             placeholder="Search by customer name, email or ID..."
@@ -827,7 +815,6 @@ export default function AdminDashboard() {
             onChange={(event) => setCustomerSearch(event.target.value)}
             aria-label="Search customers"
           />
-
           {customerSearch && (
             <button
               type="button"
@@ -840,26 +827,17 @@ export default function AdminDashboard() {
         </div>
 
         {customersLoading ? (
-          <div className="admin-empty">
-            Loading customer profiles...
-          </div>
+          <div className="admin-empty">Loading customer profiles...</div>
         ) : filteredCustomers.length === 0 ? (
           <div className="admin-empty">
             <Users size={30} />
             <h3>No customers found</h3>
-            <p>
-              {customerSearch
-                ? 'Try another search term.'
-                : 'Registered customers will appear here.'}
-            </p>
+            <p>{customerSearch ? 'Try another search term.' : 'Registered customers will appear here.'}</p>
           </div>
         ) : (
           <div className="admin-customer-list">
             {filteredCustomers.map((customer) => (
-              <article
-                className="admin-customer"
-                key={customer.id}
-              >
+              <article className="admin-customer" key={customer.id}>
                 <div className="admin-customer-profile">
                   {customer.photoURL ? (
                     <img
@@ -870,22 +848,16 @@ export default function AdminDashboard() {
                     />
                   ) : (
                     <div className="admin-customer-avatar admin-customer-initial">
-                      {(customer.name || customer.email || 'C')
-                        .charAt(0)
-                        .toUpperCase()}
+                      {(customer.name || customer.email || 'C').charAt(0).toUpperCase()}
                     </div>
                   )}
 
                   <div className="admin-customer-info">
-                    <h3>
-                      {customer.name || 'Unnamed customer'}
-                    </h3>
-
+                    <h3>{customer.name || 'Unnamed customer'}</h3>
                     <a href={`mailto:${customer.email || ''}`}>
                       <Mail size={14} />
                       {customer.email || 'No email available'}
                     </a>
-
                     <span>
                       {customer.provider === 'google.com'
                         ? 'Google account'
@@ -897,46 +869,30 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="admin-customer-dates">
-                  <span>
-                    <Calendar size={14} />
-                    Joined: {formatDate(customer.createdAt)}
-                  </span>
-
-                  <small>
-                    Last sign-in: {formatDate(customer.lastSignInAt)}
-                  </small>
+                  <span><Calendar size={14} /> Joined: {formatDate(customer.createdAt)}</span>
+                  <small>Last sign-in: {formatDate(customer.lastSignInAt)}</small>
                 </div>
               </article>
             ))}
           </div>
         )}
 
-        {/* Review moderation */}
+        {/* Review moderation and company replies */}
         <div className="admin-list-heading">
           <div>
-            <span className="section-kicker">
-              REVIEW MODERATION
-            </span>
+            <span className="section-kicker">REVIEW MODERATION</span>
             <h3>Customer reviews</h3>
-            <p>
-              Approve reviews to show them publicly on the website.
-            </p>
+            <p>Approve reviews and publish official Rex Groups replies.</p>
           </div>
-
-          <span>
-            {pendingReviews} pending · {reviews.length} total
-          </span>
+          <span>{pendingReviews} pending · {reviews.length} total</span>
         </div>
 
         <div className="admin-enquiry-tools">
           <label className="admin-filter">
             <Filter size={17} />
-
             <select
               value={reviewFilter}
-              onChange={(event) =>
-                setReviewFilter(event.target.value as ReviewStatus | 'All')
-              }
+              onChange={(event) => setReviewFilter(event.target.value as ReviewStatus | 'All')}
               aria-label="Filter reviews by status"
             >
               <option value="All">All reviews</option>
@@ -959,18 +915,16 @@ export default function AdminDashboard() {
           <div className="admin-enquiry-list">
             {filteredReviews.map((review) => {
               const status = review.status || 'Pending'
+              const isEditingReply = replyingToReview === review.id
 
               return (
                 <article className="admin-enquiry" key={review.id}>
                   <div className="admin-enquiry-top">
                     <div>
                       <h3>{review.name || 'Customer'}</h3>
-
                       <a href={`mailto:${review.email}`}>{review.email}</a>
-
                       <span>Rating: {review.rating} / 5</span>
                     </div>
-
                     <span className={`admin-status ${status.toLowerCase()}`}>
                       {status}
                     </span>
@@ -978,19 +932,103 @@ export default function AdminDashboard() {
 
                   <p className="admin-message">{review.comment}</p>
 
+                  {/* Existing published company reply */}
+                  {review.adminReply && (
+                    <div className="admin-company-reply">
+                      <strong><MessageSquare size={16} /> Rex Groups response</strong>
+                      <p>{review.adminReply}</p>
+                      <small>
+                        {safeDate(review.adminReplyAt)?.toLocaleString() || 'Published reply'}
+                      </small>
+                    </div>
+                  )}
+
+                  {/* Reply editor */}
+                  {status === 'Approved' && (
+                    <div className="admin-review-reply-area">
+                      {isEditingReply ? (
+                        <div className="admin-reply-box">
+                          <div className="admin-reply-heading">
+                            <strong>
+                              {review.adminReply ? 'Edit company reply' : 'Write company reply'}
+                            </strong>
+                            <button
+                              type="button"
+                              className="admin-button"
+                              onClick={() => {
+                                setReplyingToReview('')
+                                setReviewReplyMessage('')
+                              }}
+                              disabled={savingReviewReply}
+                              aria-label="Close reply editor"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+
+                          <textarea
+                            value={reviewReplyMessage}
+                            onChange={(event) => setReviewReplyMessage(event.target.value)}
+                            placeholder="Write an official response from Rex Groups..."
+                            rows={4}
+                            maxLength={1000}
+                            disabled={savingReviewReply}
+                          />
+
+                          <small>{reviewReplyMessage.length}/1000 characters</small>
+
+                          <button
+                            type="button"
+                            className="admin-button"
+                            onClick={() => saveReviewReply(review)}
+                            disabled={savingReviewReply || !reviewReplyMessage.trim()}
+                          >
+                            <Send size={16} />
+                            {savingReviewReply ? 'Publishing...' : 'Publish Reply'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="admin-report-actions">
+                          <button
+                            type="button"
+                            className="admin-button"
+                            onClick={() => {
+                              setReplyingToReview(review.id)
+                              setReviewReplyMessage(review.adminReply || '')
+                              setError('')
+                              setSuccess('')
+                            }}
+                          >
+                            {review.adminReply ? <Edit3 size={16} /> : <MessageSquare size={16} />}
+                            {review.adminReply ? 'Edit company reply' : 'Write company reply'}
+                          </button>
+
+                          {review.adminReply && (
+                            <button
+                              type="button"
+                              className="admin-button"
+                              onClick={() => removeReviewReply(review.id)}
+                              disabled={updating === review.id}
+                            >
+                              <Trash2 size={16} />
+                              Remove reply
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="admin-enquiry-bottom">
                     <small>
-                      {safeDate(review.createdAt)?.toLocaleString() ||
-                        'Date unavailable'}
+                      {safeDate(review.createdAt)?.toLocaleString() || 'Date unavailable'}
                     </small>
 
                     <div className="admin-report-actions">
                       <button
                         type="button"
                         className="admin-button"
-                        onClick={() =>
-                          changeReviewStatus(review.id, 'Approved')
-                        }
+                        onClick={() => changeReviewStatus(review.id, 'Approved')}
                         disabled={updating === review.id || status === 'Approved'}
                       >
                         <CheckCircle2 size={16} />
@@ -1000,9 +1038,7 @@ export default function AdminDashboard() {
                       <button
                         type="button"
                         className="admin-button"
-                        onClick={() =>
-                          changeReviewStatus(review.id, 'Rejected')
-                        }
+                        onClick={() => changeReviewStatus(review.id, 'Rejected')}
                         disabled={updating === review.id || status === 'Rejected'}
                       >
                         <X size={16} />
@@ -1028,24 +1064,16 @@ export default function AdminDashboard() {
         {/* Enquiry management */}
         <div className="admin-list-heading">
           <div>
-            <span className="section-kicker">
-              INBOX MANAGEMENT
-            </span>
+            <span className="section-kicker">INBOX MANAGEMENT</span>
             <h3>Customer enquiries</h3>
-            <p>
-              Search messages, reply to customers and update progress.
-            </p>
+            <p>Search messages, reply to customers and update progress.</p>
           </div>
-
-          <span>
-            {filteredEnquiries.length} of {enquiries.length} records
-          </span>
+          <span>{filteredEnquiries.length} of {enquiries.length} records</span>
         </div>
 
         <div className="admin-enquiry-tools">
           <div className="admin-customer-search">
             <Search size={19} />
-
             <input
               type="search"
               placeholder="Search name, email, phone, business or message..."
@@ -1053,7 +1081,6 @@ export default function AdminDashboard() {
               onChange={(event) => setEnquirySearch(event.target.value)}
               aria-label="Search enquiries"
             />
-
             {enquirySearch && (
               <button
                 type="button"
@@ -1067,12 +1094,9 @@ export default function AdminDashboard() {
 
           <label className="admin-filter">
             <Filter size={17} />
-
             <select
               value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as FilterStatus)
-              }
+              onChange={(event) => setStatusFilter(event.target.value as FilterStatus)}
               aria-label="Filter enquiries by status"
             >
               <option value="All">All statuses</option>
@@ -1084,39 +1108,24 @@ export default function AdminDashboard() {
         </div>
 
         {loading ? (
-          <div className="admin-empty">
-            Loading enquiries...
-          </div>
+          <div className="admin-empty">Loading enquiries...</div>
         ) : filteredEnquiries.length === 0 ? (
           <div className="admin-empty">
             <Inbox size={30} />
             <h3>No enquiries found</h3>
-            <p>
-              Try changing your search or status filter.
-            </p>
+            <p>Try changing your search or status filter.</p>
           </div>
         ) : (
           <div className="admin-enquiry-list">
             {filteredEnquiries.map((item) => (
-              <article
-                className="admin-enquiry"
-                key={item.id}
-              >
+              <article className="admin-enquiry" key={item.id}>
                 <div className="admin-enquiry-top">
                   <div>
-                    <h3>
-                      {item.name || 'Unnamed customer'}
-                    </h3>
-
-                    <a href={`mailto:${item.email}`}>
-                      {item.email}
-                    </a>
+                    <h3>{item.name || 'Unnamed customer'}</h3>
+                    <a href={`mailto:${item.email}`}>{item.email}</a>
 
                     {item.phone ? (
-                      <a
-                        href={`tel:${item.phone}`}
-                        className="admin-customer-phone"
-                      >
+                      <a href={`tel:${item.phone}`} className="admin-customer-phone">
                         <Phone size={15} />
                         {item.phone}
                       </a>
@@ -1124,42 +1133,23 @@ export default function AdminDashboard() {
                       <span>Phone number not provided</span>
                     )}
 
-                    {item.business && (
-                      <span>Business: {item.business}</span>
-                    )}
-
-                    {item.customerType && (
-                      <span>Customer type: {item.customerType}</span>
-                    )}
-
-                    {item.service && (
-                      <span>Service: {item.service}</span>
-                    )}
-
-                    {item.source && (
-                      <span>Source: {item.source}</span>
-                    )}
+                    {item.business && <span>Business: {item.business}</span>}
+                    {item.customerType && <span>Customer type: {item.customerType}</span>}
+                    {item.service && <span>Service: {item.service}</span>}
+                    {item.source && <span>Source: {item.source}</span>}
                   </div>
 
-                  <span
-                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
-                  >
+                  <span className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}>
                     {item.status || 'Pending'}
                   </span>
                 </div>
 
-                <p className="admin-message">
-                  {item.message}
-                </p>
+                <p className="admin-message">{item.message}</p>
 
-                {/* Customer reply area */}
                 {replyingTo === item.id ? (
                   <div className="admin-reply-box">
                     <div className="admin-reply-heading">
-                      <strong>
-                        Reply to {item.name || 'customer'}
-                      </strong>
-
+                      <strong>Reply to {item.name || 'customer'}</strong>
                       <button
                         type="button"
                         className="admin-button"
@@ -1178,9 +1168,7 @@ export default function AdminDashboard() {
 
                     <textarea
                       value={replyMessage}
-                      onChange={(event) =>
-                        setReplyMessage(event.target.value)
-                      }
+                      onChange={(event) => setReplyMessage(event.target.value)}
                       placeholder="Write your response to this customer..."
                       rows={5}
                       disabled={sendingReply}
@@ -1193,9 +1181,7 @@ export default function AdminDashboard() {
                       disabled={sendingReply || !replyMessage.trim()}
                     >
                       <Send size={16} />
-                      {sendingReply
-                        ? 'Sending reply...'
-                        : 'Send email reply'}
+                      {sendingReply ? 'Sending reply...' : 'Send email reply'}
                     </button>
                   </div>
                 ) : (
@@ -1217,31 +1203,23 @@ export default function AdminDashboard() {
 
                 <div className="admin-enquiry-bottom">
                   <small>
-                    {safeDate(item.createdAt)?.toLocaleString() ||
-                      'Date unavailable'}
+                    {safeDate(item.createdAt)?.toLocaleString() || 'Date unavailable'}
                   </small>
 
                   <label>
                     Status
-
                     <select
                       value={item.status || 'Pending'}
                       disabled={updating === item.id}
                       onChange={(event) =>
-                        changeStatus(
-                          item.id,
-                          event.target.value as EnquiryStatus,
-                        )
+                        changeStatus(item.id, event.target.value as EnquiryStatus)
                       }
                     >
                       <option value="Pending">Pending</option>
                       <option value="Contacted">Contacted</option>
                       <option value="Completed">Completed</option>
                     </select>
-
-                    {updating === item.id && (
-                      <small>Saving...</small>
-                    )}
+                    {updating === item.id && <small>Saving...</small>}
                   </label>
                 </div>
               </article>
