@@ -246,6 +246,11 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
       orderBy('createdAt', 'desc'),
     )
 
+    const reviewsQuery = query(
+  collection(firestore, 'reviews'),
+  orderBy('createdAt', 'desc'),
+)
+
     const unsubscribeEnquiries = onSnapshot(
       enquiriesQuery,
       (snapshot) => {
