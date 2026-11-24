@@ -5,6 +5,8 @@ import {
   Workflow, Settings, Mail, Phone, MapPin, Instagram, Linkedin, Github, Sparkles,
 } from 'lucide-react'
 
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { db } from './firebase'
 import { AuthButton, AuthSection } from './AuthPanel'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
@@ -64,6 +66,8 @@ function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [menuOpen, setMenuOpen] = useState(false)
   const [sent, setSent] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [contactError, setContactError] = useState('')
 
   const closeMenu = () => setMenuOpen(false)
 
@@ -100,21 +104,50 @@ function App() {
     }
   }, [menuOpen])
 
-  function handleContact(e: FormEvent<HTMLFormElement>) {
+  async function handleContact(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    const data = new FormData(e.currentTarget)
+    const form = e.currentTarget
+    const data = new FormData(form)
     const field = (key: string) => String(data.get(key) ?? '').trim()
 
     const name = field('name')
-    const subject = encodeURIComponent(`Project enquiry from ${name}`)
+    const email = field('email')
+    const business = field('business')
+    const message = field('message')
 
-    const body = encodeURIComponent(
-      `Name: ${name}\nEmail: ${field('email')}\nBusiness: ${field('business') || '—'}\n\nProject details:\n${field('message')}`,
-    )
+    setSent(false)
+    setContactError('')
 
-    window.location.href = `mailto:${EMAIL}?subject=${subject}&body=${body}`
-    setSent(true)
+    if (!db) {
+      setContactError(
+        'The enquiry service is not available right now. Please email us directly.',
+      )
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      await addDoc(collection(db, 'enquiries'), {
+        name,
+        email,
+        business,
+        message,
+        createdAt: serverTimestamp(),
+      })
+
+      setSent(true)
+      form.reset()
+    } catch (error) {
+      console.error('Enquiry submission failed:', error)
+
+      setContactError(
+        'We could not submit your enquiry. Please try again or email us directly.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const visibleSocials = SOCIALS.filter((s) => s.href)
@@ -397,38 +430,79 @@ function App() {
 
               <label>
                 Your name
-                <input name="name" placeholder="Full name" autoComplete="name" maxLength={100} required />
+                <input
+                  name="name"
+                  placeholder="Full name"
+                  autoComplete="name"
+                  maxLength={100}
+                  required
+                  disabled={submitting}
+                />
               </label>
 
               <label>
                 Email address
-                <input name="email" type="email" placeholder="you@example.com" autoComplete="email" maxLength={150} required />
+                <input
+                  name="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  maxLength={150}
+                  required
+                  disabled={submitting}
+                />
               </label>
 
               <label>
                 Business name <span className="optional">(optional)</span>
-                <input name="business" placeholder="Your business" autoComplete="organization" maxLength={120} />
+                <input
+                  name="business"
+                  placeholder="Your business"
+                  autoComplete="organization"
+                  maxLength={120}
+                  disabled={submitting}
+                />
               </label>
 
               <label>
                 What do you need help with?
-                <textarea name="message" rows={4} maxLength={1500} placeholder="A little about your project..." required />
+                <textarea
+                  name="message"
+                  rows={4}
+                  maxLength={1500}
+                  placeholder="A little about your project..."
+                  required
+                  disabled={submitting}
+                />
               </label>
 
-              <button className="button button-primary submit-btn" type="submit">
-                Send enquiry <ArrowUpRight size={17} aria-hidden="true" />
+              <button
+                className="button button-primary submit-btn"
+                type="submit"
+                disabled={submitting}
+              >
+                {submitting ? 'Sending...' : 'Send enquiry'}
+                {!submitting && <ArrowUpRight size={17} aria-hidden="true" />}
               </button>
 
               {sent && (
-                <small className="form-note" role="status">
-                  Your email app should open with your enquiry ready to send.
-                  Nothing happened? Email us directly at{' '}
-                  <a className="note-link" href={`mailto:${EMAIL}`}>{EMAIL}</a>.
+                <small className="form-note" role="status" aria-live="polite">
+                  Thank you! Your enquiry has been submitted successfully.
+                  We'll be in touch.
+                </small>
+              )}
+
+              {contactError && (
+                <small className="form-note" role="alert">
+                  {contactError}{' '}
+                  <a className="note-link" href={`mailto:${EMAIL}`}>
+                    {EMAIL}
+                  </a>
                 </small>
               )}
 
               <small className="form-note">
-                This form opens your email app; it does not store submissions on this website.
+                Your enquiry will be securely submitted to Rex Groups for follow-up.
               </small>
             </form>
           </div>
