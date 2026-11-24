@@ -24,6 +24,7 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 import { AuthButton, AuthSection, useAuth } from './AuthPanel'
 import AdminDashboard from './AdminDashboard'
+import Reviews from './Reviews'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
