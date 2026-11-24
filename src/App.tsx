@@ -222,10 +222,13 @@ function App() {
       if (window.innerWidth > 900) setMenuOpen(false)
     }
 
+    document.body.classList.add('menu-is-open')
+
     window.addEventListener('keydown', onKey)
     window.addEventListener('resize', onResize)
 
     return () => {
+      document.body.classList.remove('menu-is-open')
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', onResize)
     }
@@ -274,7 +277,6 @@ function App() {
     const source = getEnquirySource()
 
     try {
-      // Save the enquiry in Firebase.
       await addDoc(collection(db, 'enquiries'), {
         name,
         email,
@@ -289,8 +291,6 @@ function App() {
         createdAt: serverTimestamp(),
       })
 
-      // Send an email notification through EmailJS.
-      // Email notification failure does not undo the saved enquiry.
       try {
         const emailResponse = await fetch(
           'https://api.emailjs.com/api/v1.0/email/send',
@@ -368,12 +368,15 @@ function App() {
           id="site-nav"
           aria-label="Main"
           className={menuOpen ? 'nav open' : 'nav'}
+          aria-hidden={window.innerWidth <= 900 && !menuOpen}
         >
-          {NAV_LINKS.map(({ label, href }) => (
+          {NAV_LINKS.map(({ label, href }, index) => (
             <a
               key={label}
               href={href}
               onClick={closeMenu}
+              style={{ '--nav-index': index } as React.CSSProperties}
+              tabIndex={window.innerWidth <= 900 && !menuOpen ? -1 : 0}
             >
               {label}
             </a>
@@ -383,6 +386,7 @@ function App() {
             className="nav-cta"
             href="#contact"
             onClick={closeMenu}
+            tabIndex={window.innerWidth <= 900 && !menuOpen ? -1 : 0}
           >
             Let's talk
             <ArrowUpRight size={15} aria-hidden="true" />
@@ -392,6 +396,15 @@ function App() {
             <AuthButton onOpen={closeMenu} />
           </div>
         </nav>
+
+        {menuOpen && (
+          <button
+            type="button"
+            className="menu-overlay"
+            aria-label="Close navigation menu"
+            onClick={closeMenu}
+          />
+        )}
 
         <div className="header-actions">
           <div className="desktop-auth">
@@ -417,19 +430,19 @@ function App() {
 
           <button
             type="button"
-            className="icon-btn menu-btn"
+            className={`icon-btn menu-btn ${menuOpen ? 'active' : ''}`}
             aria-label={
               menuOpen ? 'Close navigation' : 'Open navigation'
             }
             aria-expanded={menuOpen}
             aria-controls="site-nav"
-            onClick={() => setMenuOpen(!menuOpen)}
+            onClick={() => setMenuOpen((previous) => !previous)}
           >
-            {menuOpen ? (
-              <X aria-hidden="true" />
-            ) : (
-              <Menu aria-hidden="true" />
-            )}
+            <span className="menu-icon-lines">
+              <span />
+              <span />
+              <span />
+            </span>
           </button>
         </div>
       </header>
@@ -759,7 +772,6 @@ function App() {
 
               <label>
                 Your name
-
                 <input
                   name="name"
                   placeholder="Full name"
@@ -772,7 +784,6 @@ function App() {
 
               <label>
                 Email address
-
                 <input
                   name="email"
                   type="email"
@@ -787,7 +798,6 @@ function App() {
               <label>
                 Phone number
                 <span className="optional">(optional)</span>
-
                 <input
                   name="phone"
                   type="tel"
@@ -800,7 +810,6 @@ function App() {
 
               <label>
                 Are you enquiring as an individual or business?
-
                 <select
                   name="customerType"
                   required
@@ -820,7 +829,6 @@ function App() {
               <label>
                 Business name
                 <span className="optional">(optional)</span>
-
                 <input
                   name="business"
                   placeholder="Your business"
@@ -832,7 +840,6 @@ function App() {
 
               <label>
                 Which service are you interested in?
-
                 <select
                   name="service"
                   required
@@ -842,7 +849,6 @@ function App() {
                   <option value="" disabled>
                     Select a service
                   </option>
-
                   {SERVICE_OPTIONS.map((service) => (
                     <option key={service} value={service}>
                       {service}
@@ -853,7 +859,6 @@ function App() {
 
               <label>
                 Tell us about your project
-
                 <textarea
                   name="message"
                   rows={4}
@@ -870,12 +875,8 @@ function App() {
                 disabled={submitting}
               >
                 {submitting ? 'Sending...' : 'Send enquiry'}
-
                 {!submitting && (
-                  <ArrowUpRight
-                    size={17}
-                    aria-hidden="true"
-                  />
+                  <ArrowUpRight size={17} aria-hidden="true" />
                 )}
               </button>
 
@@ -893,10 +894,7 @@ function App() {
               {contactError && (
                 <small className="form-note" role="alert">
                   {contactError}{' '}
-                  <a
-                    className="note-link"
-                    href={`mailto:${EMAIL}`}
-                  >
+                  <a className="note-link" href={`mailto:${EMAIL}`}>
                     {EMAIL}
                   </a>
                 </small>
@@ -910,7 +908,7 @@ function App() {
           </div>
         </section>
 
-                <AuthSection />
+        <AuthSection />
 
         <Reviews />
 
