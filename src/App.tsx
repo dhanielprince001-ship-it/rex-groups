@@ -75,6 +75,14 @@ const SERVICES = [
   },
 ]
 
+const SERVICE_OPTIONS = [
+  'Website Development',
+  'E-commerce Solutions',
+  'Business Digital Solutions',
+  'Maintenance & Support',
+  'Other / Not sure yet',
+]
+
 const PROJECTS = [
   {
     tone: 'fashion',
@@ -152,6 +160,28 @@ function getInitialTheme(): Theme {
     : 'dark'
 }
 
+function getEnquirySource() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+
+    const campaignSource =
+      params.get('utm_source') ||
+      params.get('source')
+
+    if (campaignSource) {
+      return campaignSource.slice(0, 100)
+    }
+
+    if (document.referrer) {
+      return new URL(document.referrer).hostname
+    }
+
+    return 'Direct'
+  } catch {
+    return 'Unknown'
+  }
+}
+
 function App() {
   const { user } = useAuth()
 
@@ -211,7 +241,10 @@ function App() {
 
     const name = field('name')
     const email = field('email')
+    const phone = field('phone')
     const business = field('business')
+    const customerType = field('customerType')
+    const service = field('service')
     const message = field('message')
 
     setSent(false)
@@ -224,27 +257,39 @@ function App() {
       return
     }
 
-    if (!name || !email || !message) {
+    if (
+      !name ||
+      !email ||
+      !customerType ||
+      !service ||
+      !message
+    ) {
       setContactError('Please complete all required fields.')
       return
     }
 
     setSubmitting(true)
 
+    const source = getEnquirySource()
+
     try {
-      // 1. Save the enquiry in Firebase.
+      // Save the enquiry in Firebase.
       await addDoc(collection(db, 'enquiries'), {
         name,
         email,
+        phone,
         business,
+        customerType,
+        service,
         message,
+        source,
         ...(user ? { userId: user.uid } : {}),
         status: 'Pending',
         createdAt: serverTimestamp(),
       })
 
-      // 2. Send an email notification through EmailJS.
-      // An email failure will not undo the Firebase submission.
+      // Send an email notification through EmailJS.
+      // Email notification failure does not undo the saved enquiry.
       try {
         const emailResponse = await fetch(
           'https://api.emailjs.com/api/v1.0/email/send',
@@ -260,7 +305,11 @@ function App() {
               template_params: {
                 name,
                 email,
+                phone: phone || 'Not provided',
                 business: business || 'Not provided',
+                customer_type: customerType,
+                service,
+                source,
                 message,
                 title: 'New Customer Enquiry',
                 time: new Date().toLocaleString(),
@@ -735,6 +784,39 @@ function App() {
               </label>
 
               <label>
+                Phone number
+                <span className="optional">(optional)</span>
+
+                <input
+                  name="phone"
+                  type="tel"
+                  placeholder="+234..."
+                  autoComplete="tel"
+                  maxLength={30}
+                  disabled={submitting}
+                />
+              </label>
+
+              <label>
+                Are you enquiring as an individual or business?
+
+                <select
+                  name="customerType"
+                  required
+                  defaultValue=""
+                  disabled={submitting}
+                >
+                  <option value="" disabled>
+                    Select an option
+                  </option>
+                  <option value="Individual">Individual</option>
+                  <option value="Company / Organisation">
+                    Company / Organisation
+                  </option>
+                </select>
+              </label>
+
+              <label>
                 Business name
                 <span className="optional">(optional)</span>
 
@@ -748,7 +830,28 @@ function App() {
               </label>
 
               <label>
-                What do you need help with?
+                Which service are you interested in?
+
+                <select
+                  name="service"
+                  required
+                  defaultValue=""
+                  disabled={submitting}
+                >
+                  <option value="" disabled>
+                    Select a service
+                  </option>
+
+                  {SERVICE_OPTIONS.map((service) => (
+                    <option key={service} value={service}>
+                      {service}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Tell us about your project
 
                 <textarea
                   name="message"
@@ -856,9 +959,7 @@ function App() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {Icon && (
-                    <Icon size={16} aria-hidden="true" />
-                  )}
+                  <Icon size={16} aria-hidden="true" />
                 </a>
               ),
             )}
