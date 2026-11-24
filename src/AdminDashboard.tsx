@@ -9,7 +9,6 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore'
-import { onAuthStateChanged, type User } from 'firebase/auth'
 import {
   ShieldCheck,
   Inbox,
@@ -28,7 +27,8 @@ import {
   X,
 } from 'lucide-react'
 
-import { auth, db } from './firebase'
+import { db } from './firebase'
+import { useAuth } from './AuthPanel'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
@@ -127,8 +127,7 @@ function downloadCSV(enquiries: Enquiry[]) {
 }
 
 export default function AdminDashboard() {
-  const [user, setUser] = useState<User | null>(null)
-  const [authReady, setAuthReady] = useState(false)
+  const { user, ready: authReady } = useAuth()
 
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -144,21 +143,25 @@ export default function AdminDashboard() {
 
   const isAdmin = user?.uid === ADMIN_UID
 
-  // Authentication
-  useEffect(() => {
-    if (!auth) {
-      setUser(null)
-      setAuthReady(true)
-      return
-    }
+  // Filter enquiries (must stay above the early returns below: Rules of Hooks)
+  const filteredEnquiries = useMemo(() => {
+    const search = enquirySearch.trim().toLowerCase()
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser)
-      setAuthReady(true)
+    return enquiries.filter((item) => {
+      const matchesStatus =
+        statusFilter === 'All' ||
+        (item.status || 'Pending') === statusFilter
+
+      const matchesSearch =
+        !search ||
+        (item.name || '').toLowerCase().includes(search) ||
+        (item.email || '').toLowerCase().includes(search) ||
+        (item.business || '').toLowerCase().includes(search) ||
+        (item.message || '').toLowerCase().includes(search)
+
+      return matchesStatus && matchesSearch
     })
-
-    return unsubscribe
-  }, [])
+  }, [enquiries, enquirySearch, statusFilter])
 
   // Load enquiries and customer profiles
   useEffect(() => {
@@ -340,26 +343,6 @@ export default function AdminDashboard() {
     ...monthlyData.map((item) => item.count),
     1,
   )
-
-  // Filter enquiries
-  const filteredEnquiries = useMemo(() => {
-    const search = enquirySearch.trim().toLowerCase()
-
-    return enquiries.filter((item) => {
-      const matchesStatus =
-        statusFilter === 'All' ||
-        (item.status || 'Pending') === statusFilter
-
-      const matchesSearch =
-        !search ||
-        (item.name || '').toLowerCase().includes(search) ||
-        (item.email || '').toLowerCase().includes(search) ||
-        (item.business || '').toLowerCase().includes(search) ||
-        (item.message || '').toLowerCase().includes(search)
-
-      return matchesStatus && matchesSearch
-    })
-  }, [enquiries, enquirySearch, statusFilter])
 
   // Customer search
   const filteredCustomers = customers.filter((customer) => {
