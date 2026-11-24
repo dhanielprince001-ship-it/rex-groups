@@ -19,7 +19,15 @@ import {
   type User,
 } from 'firebase/auth'
 
-import { auth, googleProvider } from './firebase'
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from 'firebase/firestore'
+
+import { auth, db, googleProvider } from './firebase'
 
 type Mode = 'login' | 'register'
 
@@ -109,6 +117,36 @@ function friendlyError(error: unknown, fallback: string): string {
   }
 }
 
+// Create or update a customer's Firestore profile.
+async function syncCustomerProfile(user: User) {
+  if (!db) return
+
+  const profileRef = doc(db, 'profiles', user.uid)
+  const existingProfile = await getDoc(profileRef)
+
+  const profileData = {
+    uid: user.uid,
+    name: user.displayName || user.email || 'Customer',
+    email: user.email || '',
+    photoURL: user.photoURL || '',
+    provider: user.providerData[0]?.providerId || 'unknown',
+  }
+
+  if (existingProfile.exists()) {
+    await updateDoc(profileRef, {
+      ...profileData,
+      lastSignInAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  } else {
+    await setDoc(profileRef, {
+      ...profileData,
+      createdAt: serverTimestamp(),
+      lastSignInAt: serverTimestamp(),
+    })
+  }
+}
+
 export function AuthProvider({
   children,
 }: {
@@ -127,7 +165,18 @@ export function AuthProvider({
 
     const unsubscribe = onAuthStateChanged(
       auth,
-      (nextUser) => {
+      async (nextUser) => {
+        if (nextUser) {
+          try {
+            await syncCustomerProfile(nextUser)
+          } catch (error) {
+            console.error(
+              'Customer profile sync failed:',
+              error
+            )
+          }
+        }
+
         setUser(nextUser)
         setReady(true)
       },
@@ -249,6 +298,9 @@ function AccountCenter({ user }: { user: User }) {
       })
 
       await user.reload()
+
+      await syncCustomerProfile(user)
+
       refresh()
 
       setNotice('Your name has been updated.')
@@ -394,17 +446,22 @@ export function AuthSection() {
           await updateProfile(result.user, {
             displayName: name.trim(),
           })
-
-          refresh()
         }
+
+        await syncCustomerProfile(result.user)
+
+        refresh()
 
         setNotice('Your account has been created.')
       } else {
-        await signInWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        )
+        const result =
+          await signInWithEmailAndPassword(
+            auth,
+            email.trim(),
+            password
+          )
+
+        await syncCustomerProfile(result.user)
 
         setNotice('You have signed in successfully.')
       }
@@ -437,6 +494,7 @@ export function AuthSection() {
       )
 
       await result.user.reload()
+      await syncCustomerProfile(result.user)
 
       setNotice(
         `Welcome, ${
