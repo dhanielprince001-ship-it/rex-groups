@@ -16,6 +16,9 @@ import {
   Clock,
   CheckCircle2,
   RefreshCw,
+  BarChart3,
+  Activity,
+  CalendarDays,
 } from 'lucide-react'
 
 import { auth, db } from './firebase'
@@ -34,6 +37,15 @@ type Enquiry = {
   }
 }
 
+function getEnquiryDate(item: Enquiry): Date | null {
+  try {
+    const date = item.createdAt?.toDate()
+    return date && !Number.isNaN(date.getTime()) ? date : null
+  } catch {
+    return null
+  }
+}
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -44,7 +56,6 @@ export default function AdminDashboard() {
 
   const isAdmin = user?.uid === ADMIN_UID
 
-  // Safely monitor Firebase authentication
   useEffect(() => {
     if (!auth) {
       setUser(null)
@@ -60,7 +71,6 @@ export default function AdminDashboard() {
     return unsubscribe
   }, [])
 
-  // Load enquiries only for the administrator
   useEffect(() => {
     if (!authReady || !isAdmin) {
       setLoading(false)
@@ -97,9 +107,7 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error('Dashboard error:', err)
-        setError(
-          'Unable to load enquiries. Check your connection and Firestore rules.',
-        )
+        setError('Unable to load enquiries. Check your connection and Firestore rules.')
         setLoading(false)
       },
     )
@@ -107,7 +115,6 @@ export default function AdminDashboard() {
     return unsubscribe
   }, [authReady, isAdmin])
 
-  // Update an enquiry's status
   async function changeStatus(
     id: string,
     status: Enquiry['status'],
@@ -135,9 +142,7 @@ export default function AdminDashboard() {
   if (!authReady) {
     return (
       <section className="admin-section" id="admin">
-        <div className="admin-card">
-          Checking administrator access...
-        </div>
+        <div className="admin-card">Checking administrator access...</div>
       </section>
     )
   }
@@ -148,12 +153,8 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Administrator access</h2>
-          <p>
-            Please sign in with your administrator account to continue.
-          </p>
-          <a href="#account" className="admin-button">
-            Go to sign in
-          </a>
+          <p>Please sign in with your administrator account to continue.</p>
+          <a href="#account" className="admin-button">Go to sign in</a>
         </div>
       </section>
     )
@@ -165,9 +166,7 @@ export default function AdminDashboard() {
         <div className="admin-card admin-locked">
           <ShieldCheck size={34} />
           <h2>Access restricted</h2>
-          <p>
-            This account does not have administrator permission.
-          </p>
+          <p>This account does not have administrator permission.</p>
         </div>
       </section>
     )
@@ -185,9 +184,41 @@ export default function AdminDashboard() {
     (item) => item.status === 'Completed',
   ).length
 
+  // Build the last six calendar months.
+  const now = new Date()
+
+  const monthlyData = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(
+      now.getFullYear(),
+      now.getMonth() - (5 - index),
+      1,
+    )
+
+    const count = enquiries.filter((item) => {
+      const enquiryDate = getEnquiryDate(item)
+
+      return enquiryDate &&
+        enquiryDate.getMonth() === date.getMonth() &&
+        enquiryDate.getFullYear() === date.getFullYear()
+    }).length
+
+    return {
+      label: date.toLocaleDateString('en', { month: 'short' }),
+      count,
+    }
+  })
+
+  const maxMonthlyCount = Math.max(
+    ...monthlyData.map((item) => item.count),
+    1,
+  )
+
+  const recentEnquiries = enquiries.slice(0, 5)
+
   return (
     <section className="admin-section" id="admin">
       <div className="section-wrap">
+
         <div className="admin-heading">
           <div>
             <span className="section-kicker">
@@ -197,7 +228,7 @@ export default function AdminDashboard() {
               Admin <em>dashboard.</em>
             </h2>
             <p>
-              Welcome, administrator. Manage your business enquiries here.
+              Welcome, administrator. Monitor and manage your business enquiries.
             </p>
           </div>
 
@@ -206,6 +237,7 @@ export default function AdminDashboard() {
           </span>
         </div>
 
+        {/* Overview statistics */}
         <div className="admin-stats">
           <div className="admin-stat">
             <Inbox size={22} />
@@ -232,90 +264,166 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="admin-list-heading">
-          <div>
-            <h3>Customer enquiries</h3>
-            <p>
-              Messages submitted through your website contact form.
-            </p>
-          </div>
-
-          <span>{enquiries.length} records</span>
-        </div>
-
         {error && (
-          <p className="admin-error" role="alert">
-            {error}
-          </p>
+          <p className="admin-error" role="alert">{error}</p>
         )}
 
         {loading ? (
-          <div className="admin-empty">
-            Loading enquiries...
-          </div>
-        ) : enquiries.length === 0 ? (
-          <div className="admin-empty">
-            <Inbox size={30} />
-            <h3>No enquiries yet</h3>
-            <p>New customer enquiries will appear here.</p>
-          </div>
+          <div className="admin-empty">Loading analytics...</div>
         ) : (
-          <div className="admin-enquiry-list">
-            {enquiries.map((item) => (
-              <article className="admin-enquiry" key={item.id}>
-                <div className="admin-enquiry-top">
+          <>
+            {/* Monthly analytics */}
+            <div className="admin-analytics-grid">
+
+              <div className="admin-analytics-card">
+                <div className="admin-analytics-heading">
                   <div>
-                    <h3>{item.name || 'Unnamed customer'}</h3>
-
-                    <a href={`mailto:${item.email}`}>
-                      {item.email}
-                    </a>
-
-                    {item.business && (
-                      <span>{item.business}</span>
-                    )}
+                    <span className="section-kicker">PERFORMANCE</span>
+                    <h3>Enquiry overview</h3>
+                    <p>Enquiries received over the last six months.</p>
                   </div>
-
-                  <span
-                    className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
-                  >
-                    {item.status || 'Pending'}
-                  </span>
+                  <BarChart3 size={24} />
                 </div>
 
-                <p className="admin-message">
-                  {item.message}
+                <div className="admin-chart">
+                  {monthlyData.map((month) => (
+                    <div className="admin-chart-column" key={month.label}>
+                      <strong>{month.count}</strong>
+
+                      <div className="admin-chart-track">
+                        <div
+                          className="admin-chart-bar"
+                          style={{
+                            height: `${Math.max(
+                              (month.count / maxMonthlyCount) * 100,
+                              month.count > 0 ? 8 : 0,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+
+                      <span>{month.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recent activity */}
+              <div className="admin-analytics-card">
+                <div className="admin-analytics-heading">
+                  <div>
+                    <span className="section-kicker">LATEST UPDATES</span>
+                    <h3>Recent activity</h3>
+                    <p>Your five latest customer enquiries.</p>
+                  </div>
+                  <Activity size={24} />
+                </div>
+
+                {recentEnquiries.length === 0 ? (
+                  <div className="admin-recent-empty">
+                    No recent activity yet.
+                  </div>
+                ) : (
+                  <div className="admin-recent-list">
+                    {recentEnquiries.map((item) => (
+                      <div className="admin-recent-item" key={item.id}>
+                        <div className="admin-recent-icon">
+                          <Inbox size={17} />
+                        </div>
+
+                        <div className="admin-recent-info">
+                          <strong>{item.name || 'Unnamed customer'}</strong>
+                          <span>{item.email}</span>
+                          <small>
+                            {getEnquiryDate(item)?.toLocaleString() ||
+                              'Date unavailable'}
+                          </small>
+                        </div>
+
+                        <span
+                          className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
+                        >
+                          {item.status || 'Pending'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Enquiry management */}
+            <div className="admin-list-heading">
+              <div>
+                <h3>Customer enquiries</h3>
+                <p>
+                  Review customer messages and update their progress.
                 </p>
+              </div>
 
-                <div className="admin-enquiry-bottom">
-                  <small>
-                    {item.createdAt?.toDate
-                      ? item.createdAt.toDate().toLocaleString()
-                      : 'Date unavailable'}
-                  </small>
+              <span>{enquiries.length} records</span>
+            </div>
 
-                  <label>
-                    Status
+            {enquiries.length === 0 ? (
+              <div className="admin-empty">
+                <Inbox size={30} />
+                <h3>No enquiries yet</h3>
+                <p>New customer enquiries will appear here.</p>
+              </div>
+            ) : (
+              <div className="admin-enquiry-list">
+                {enquiries.map((item) => (
+                  <article className="admin-enquiry" key={item.id}>
+                    <div className="admin-enquiry-top">
+                      <div>
+                        <h3>{item.name || 'Unnamed customer'}</h3>
 
-                    <select
-                      value={item.status || 'Pending'}
-                      disabled={updating === item.id}
-                      onChange={(event) =>
-                        changeStatus(
-                          item.id,
-                          event.target.value as Enquiry['status'],
-                        )
-                      }
-                    >
-                      <option value="Pending">Pending</option>
-                      <option value="Contacted">Contacted</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </label>
-                </div>
-              </article>
-            ))}
-          </div>
+                        <a href={`mailto:${item.email}`}>
+                          {item.email}
+                        </a>
+
+                        {item.business && <span>{item.business}</span>}
+                      </div>
+
+                      <span
+                        className={`admin-status ${(item.status || 'Pending').toLowerCase()}`}
+                      >
+                        {item.status || 'Pending'}
+                      </span>
+                    </div>
+
+                    <p className="admin-message">{item.message}</p>
+
+                    <div className="admin-enquiry-bottom">
+                      <small>
+                        {getEnquiryDate(item)?.toLocaleString() ||
+                          'Date unavailable'}
+                      </small>
+
+                      <label>
+                        Status
+
+                        <select
+                          value={item.status || 'Pending'}
+                          disabled={updating === item.id}
+                          onChange={(event) =>
+                            changeStatus(
+                              item.id,
+                              event.target.value as Enquiry['status'],
+                            )
+                          }
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Contacted">Contacted</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+                      </label>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
