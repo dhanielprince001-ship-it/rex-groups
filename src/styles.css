@@ -2612,3 +2612,309 @@ h2 em {
     animation-duration: 0.01ms !important;
   }
 }
+
+
+/* ================================
+   REX GROUPS MARKETPLACE
+================================ */
+
+.marketplace-section {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 100px 24px;
+  color: var(--text);
+}
+
+.marketplace-heading {
+  max-width: 680px;
+  margin: 0 auto 45px;
+  text-align: center;
+}
+
+.marketplace-eyebrow {
+  display: inline-block;
+  margin-bottom: 15px;
+  color: var(--accentInk);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.marketplace-heading h2 {
+  margin: 0 0 16px;
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1.1;
+  letter-spacing: -1.8px;
+}
+
+.marketplace-heading p {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.marketplace-card,
+.marketplace-form {
+  width: 100%;
+  max-width: 650px;
+  margin: 0 auto;
+  padding: 35px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+}
+
+.marketplace-card {
+  text-align: center;
+}
+
+.marketplace-card > svg {
+  color: var(--accentInk);
+  margin-bottom: 15px;
+}
+
+.marketplace-card h2 {
+  margin: 0 0 12px;
+  font-size: 27px;
+}
+
+.marketplace-card p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin-bottom: 25px;
+}
+
+.marketplace-form-heading {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.marketplace-form-heading > svg {
+  flex-shrink: 0;
+  color: var(--accentInk);
+}
+
+.marketplace-form-heading h3 {
+  margin: 0 0 5px;
+  font-size: 22px;
+}
+
+.marketplace-form-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.marketplace-form label {
+  display: block;
+  margin: 22px 0 9px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.marketplace-form input,
+.marketplace-form select,
+.marketplace-form textarea {
+  display: block;
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.marketplace-form input:focus,
+.marketplace-form select:focus,
+.marketplace-form textarea:focus {
+  border-color: var(--accentInk);
+  box-shadow: 0 0 0 3px rgba(182, 232, 61, 0.12);
+}
+
+.marketplace-form textarea {
+  resize: vertical;
+  min-height: 130px;
+  line-height: 1.7;
+}
+
+.marketplace-form input:disabled,
+.marketplace-form select:disabled,
+.marketplace-form textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.marketplace-hint {
+  margin: 9px 0 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.marketplace-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 18px;
+  padding: 14px 22px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accentText);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.marketplace-button:hover {
+  transform: translateY(-2px);
+}
+
+.marketplace-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.marketplace-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 650px;
+  margin: 0 auto 25px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.marketplace-status > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.marketplace-status strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.marketplace-status p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.marketplace-status.pending > svg {
+  color: #d69b32;
+}
+
+.marketplace-status.approved > svg {
+  color: #56b879;
+}
+
+.marketplace-status.rejected > svg,
+.marketplace-status.suspended > svg {
+  color: #dc6464;
+}
+
+.marketplace-error,
+.marketplace-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.marketplace-error {
+  background: rgba(220, 80, 80, 0.1);
+  color: #e47777;
+  border: 1px solid rgba(220, 80, 80, 0.2);
+}
+
+.marketplace-success {
+  background: rgba(70, 180, 110, 0.1);
+  color: #56b879;
+  border: 1px solid rgba(70, 180, 110, 0.2);
+}
+
+.marketplace-error svg,
+.marketplace-success svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.marketplace-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  min-height: 250px;
+  color: var(--muted);
+}
+
+.marketplace-spinner {
+  animation: marketplace-spin 1s linear infinite;
+}
+
+@keyframes marketplace-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* MOBILE */
+
+@media (max-width: 600px) {
+  .marketplace-section {
+    padding: 65px 16px;
+  }
+
+  .marketplace-heading {
+    margin-bottom: 30px;
+  }
+
+  .marketplace-heading h2 {
+    letter-spacing: -1px;
+  }
+
+  .marketplace-card,
+  .marketplace-form {
+    padding: 23px 18px;
+    border-radius: 15px;
+  }
+
+  .marketplace-form-heading {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .marketplace-form-heading h3 {
+    font-size: 19px;
+  }
+
+  .marketplace-status {
+    padding: 15px;
+  }
+}
+
