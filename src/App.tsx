@@ -22,7 +22,7 @@ import {
 
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
-import { AuthButton, AuthSection } from './AuthPanel'
+import { AuthButton, AuthSection, useAuth } from './AuthPanel'
 import AdminDashboard from './AdminDashboard'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
@@ -149,6 +149,8 @@ function getInitialTheme(): Theme {
 }
 
 function App() {
+  const { user } = useAuth()
+
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [menuOpen, setMenuOpen] = useState(false)
   const [sent, setSent] = useState(false)
@@ -218,6 +220,11 @@ function App() {
       return
     }
 
+    if (!name || !email || !message) {
+      setContactError('Please complete all required fields.')
+      return
+    }
+
     setSubmitting(true)
 
     try {
@@ -226,6 +233,8 @@ function App() {
         email,
         business,
         message,
+        ...(user ? { userId: user.uid } : {}),
+        status: 'Pending',
         createdAt: serverTimestamp(),
       })
 
