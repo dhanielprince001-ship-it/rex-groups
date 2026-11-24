@@ -186,12 +186,23 @@ function App() {
 
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [sent, setSent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [contactError, setContactError] = useState('')
 
   const closeMenu = () => setMenuOpen(false)
 
+  // Loading screen
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setIsLoading(false)
+    }, 1600)
+
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  // Theme management
   useEffect(() => {
     document.documentElement.dataset.theme = theme
 
@@ -209,6 +220,7 @@ function App() {
     }
   }, [theme])
 
+  // Mobile navigation management
   useEffect(() => {
     if (!menuOpen) return
 
@@ -346,6 +358,34 @@ function App() {
 
   return (
     <div className={`app ${theme}`}>
+
+      {/* PREMIUM REX GROUPS LOADING SCREEN */}
+      {isLoading && (
+        <div
+          className="rex-loader"
+          role="status"
+          aria-label="Loading Rex Groups"
+        >
+          <div className="loader-content">
+            <div className="loader-logo">
+              R<span>.</span>
+            </div>
+
+            <h2>REX GROUPS</h2>
+
+            <p>TECHNOLOGY · BUSINESS · INNOVATION</p>
+
+            <div className="loader-track">
+              <div className="loader-progress" />
+            </div>
+
+            <span className="loader-caption">
+              BUILDING WHAT'S NEXT
+            </span>
+          </div>
+        </div>
+      )}
+
       <a className="skip-link" href="#main">
         Skip to content
       </a>
