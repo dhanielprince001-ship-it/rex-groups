@@ -2298,5 +2298,25 @@ h2 em {
   }
 }
 
+.review-company-reply {
+  margin-top: 18px;
+  padding: 16px;
+  border-left: 3px solid #f28c28;
+  background: rgba(242, 140, 40, 0.08);
+  border-radius: 8px;
+}
+
+.review-company-reply-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f28c28;
+}
+
+.review-company-reply p {
+  margin: 10px 0 0;
+  line-height: 1.7;
+}
+
 
 
