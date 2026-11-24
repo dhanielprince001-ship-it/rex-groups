@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
-  Menu,
+  
   X,
   Sun,
   Moon,
