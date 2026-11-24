@@ -26,6 +26,7 @@ import {
   Filter,
   X,
   Send,
+  Phone,
 } from 'lucide-react'
 
 import { db } from './firebase'
@@ -45,7 +46,11 @@ type Enquiry = {
   id: string
   name: string
   email: string
+  phone?: string
   business?: string
+  customerType?: string
+  service?: string
+  source?: string
   message: string
   status?: EnquiryStatus
   createdAt?: {
@@ -96,7 +101,11 @@ function downloadCSV(enquiries: Enquiry[]) {
   const headings = [
     'Customer',
     'Email',
+    'Phone',
     'Business',
+    'Customer Type',
+    'Service',
+    'Source',
     'Message',
     'Status',
     'Date',
@@ -105,7 +114,11 @@ function downloadCSV(enquiries: Enquiry[]) {
   const rows = enquiries.map((item) => [
     item.name,
     item.email,
+    item.phone || 'Not provided',
     item.business || 'General enquiry',
+    item.customerType || '',
+    item.service || '',
+    item.source || '',
     item.message,
     item.status || 'Pending',
     safeDate(item.createdAt)?.toISOString() || '',
@@ -171,7 +184,11 @@ export default function AdminDashboard() {
         !search ||
         (item.name || '').toLowerCase().includes(search) ||
         (item.email || '').toLowerCase().includes(search) ||
+        (item.phone || '').toLowerCase().includes(search) ||
         (item.business || '').toLowerCase().includes(search) ||
+        (item.customerType || '').toLowerCase().includes(search) ||
+        (item.service || '').toLowerCase().includes(search) ||
+        (item.source || '').toLowerCase().includes(search) ||
         (item.message || '').toLowerCase().includes(search)
 
       return matchesStatus && matchesSearch
@@ -664,6 +681,7 @@ export default function AdminDashboard() {
                       {item.name || 'Unnamed customer'}
                     </strong>
                     <span>{item.email}</span>
+                    {item.phone && <span>{item.phone}</span>}
                     <small>
                       {safeDate(item.createdAt)?.toLocaleString() ||
                         'Date unavailable'}
@@ -813,7 +831,7 @@ export default function AdminDashboard() {
 
             <input
               type="search"
-              placeholder="Search name, email, business or message..."
+              placeholder="Search name, email, phone, business or message..."
               value={enquirySearch}
               onChange={(event) => setEnquirySearch(event.target.value)}
               aria-label="Search enquiries"
@@ -877,8 +895,32 @@ export default function AdminDashboard() {
                       {item.email}
                     </a>
 
+                    {item.phone ? (
+                      <a
+                        href={`tel:${item.phone}`}
+                        className="admin-customer-phone"
+                      >
+                        <Phone size={15} />
+                        {item.phone}
+                      </a>
+                    ) : (
+                      <span>Phone number not provided</span>
+                    )}
+
                     {item.business && (
-                      <span>{item.business}</span>
+                      <span>Business: {item.business}</span>
+                    )}
+
+                    {item.customerType && (
+                      <span>Customer type: {item.customerType}</span>
+                    )}
+
+                    {item.service && (
+                      <span>Service: {item.service}</span>
+                    )}
+
+                    {item.source && (
+                      <span>Source: {item.source}</span>
                     )}
                   </div>
 
