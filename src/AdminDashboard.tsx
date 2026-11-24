@@ -287,11 +287,30 @@ const [reviewFilter, setReviewFilter] = useState<ReviewStatus | 'All'>('All')
         )
         setCustomersLoading(false)
       },
+      const unsubscribeReviews = onSnapshot(
+  reviewsQuery,
+  (snapshot) => {
+    setReviews(
+      snapshot.docs.map((item) => ({
+        id: item.id,
+        ...item.data(),
+      })) as Review[],
     )
+    setReviewsLoading(false)
+  },
+  (err) => {
+    console.error('Reviews error:', err)
+    setError('Unable to load customer reviews.')
+    setReviewsLoading(false)
+  },
+)
+    )
+    
 
     return () => {
       unsubscribeEnquiries()
       unsubscribeCustomers()
+      unsubscribeReviews()
     }
   }, [authReady, isAdmin])
 
