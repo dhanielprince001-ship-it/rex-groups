@@ -29,6 +29,10 @@ const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
 const PHONE_DISPLAY = '+234 803 356 4331'
 
+const EMAILJS_SERVICE_ID = 'service_o4p3v01'
+const EMAILJS_TEMPLATE_ID = 'template_s7fsdbq'
+const EMAILJS_PUBLIC_KEY = '0NkqQxyu5RfJ2UFXl'
+
 const SOCIALS = [
   { label: 'LinkedIn', href: '', icon: Linkedin },
   { label: 'Instagram', href: '', icon: Instagram },
@@ -228,6 +232,7 @@ function App() {
     setSubmitting(true)
 
     try {
+      // 1. Save the enquiry in Firebase.
       await addDoc(collection(db, 'enquiries'), {
         name,
         email,
@@ -237,6 +242,42 @@ function App() {
         status: 'Pending',
         createdAt: serverTimestamp(),
       })
+
+      // 2. Send an email notification through EmailJS.
+      // An email failure will not undo the Firebase submission.
+      try {
+        const emailResponse = await fetch(
+          'https://api.emailjs.com/api/v1.0/email/send',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              service_id: EMAILJS_SERVICE_ID,
+              template_id: EMAILJS_TEMPLATE_ID,
+              user_id: EMAILJS_PUBLIC_KEY,
+              template_params: {
+                name,
+                email,
+                business: business || 'Not provided',
+                message,
+                title: 'New Customer Enquiry',
+                time: new Date().toLocaleString(),
+              },
+            }),
+          },
+        )
+
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text()
+          throw new Error(errorText || 'Email notification failed')
+        }
+
+        console.info('Email notification sent successfully.')
+      } catch (emailError) {
+        console.error('EmailJS notification failed:', emailError)
+      }
 
       setSent(true)
       form.reset()
