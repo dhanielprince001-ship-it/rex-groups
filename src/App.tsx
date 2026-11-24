@@ -3,8 +3,6 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
   ArrowUpRight,
-  
-  X,
   Sun,
   Moon,
   Code2,
