@@ -23,6 +23,7 @@ import { db } from './firebase'
 import { AuthButton, AuthSection, useAuth } from './AuthPanel'
 import AdminDashboard from './AdminDashboard'
 import Reviews from './Reviews'
+import Marketplace from './Marketplace'
 
 const EMAIL = 'rexgroups.uk@gmail.com'
 const WHATSAPP = '2348033564331'
@@ -42,6 +43,7 @@ const NAV_LINKS = [
   { label: 'About', href: '#about' },
   { label: 'Services', href: '#services' },
   { label: 'Work', href: '#work' },
+  { label: 'Marketplace', href: '#marketplace' },
   { label: 'Process', href: '#process' },
   { label: 'Contact', href: '#contact' },
   { label: 'Admin', href: '#admin' },
@@ -948,9 +950,11 @@ function App() {
 
         <AuthSection />
 
-        <Reviews />
+<Marketplace />
 
-        <AdminDashboard />
+<Reviews />
+
+<AdminDashboard />
       </main>
 
       <footer className="footer">
