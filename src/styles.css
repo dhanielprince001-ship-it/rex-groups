@@ -1970,4 +1970,170 @@ h2 em {
 }
 
 
+/* ADMIN MANAGEMENT UPGRADE */
+
+.admin-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.admin-report-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.admin-report-actions button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.admin-completion {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.admin-completion > strong {
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.admin-completion-track {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--line, rgba(128,128,128,.2));
+}
+
+.admin-completion-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, currentColor);
+  transition: width .3s ease;
+}
+
+.admin-completion p {
+  opacity: .7;
+  margin: 0;
+}
+
+.admin-recent-card {
+  margin-top: 22px;
+}
+
+.admin-enquiry-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.admin-enquiry-tools .admin-customer-search {
+  flex: 1;
+  min-width: 220px;
+  margin: 0;
+}
+
+.admin-customer-search button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.admin-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line, rgba(128,128,128,.25));
+  border-radius: 10px;
+}
+
+.admin-filter select {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  outline: none;
+  font: inherit;
+}
+
+.admin-filter option {
+  color: #111;
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .admin-section {
+    padding: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .admin-section .section-wrap {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .admin-report-actions,
+  .admin-customer-search,
+  .admin-enquiry-tools,
+  .admin-enquiry-bottom select,
+  .admin-secure {
+    display: none !important;
+  }
+
+  .admin-analytics-card,
+  .admin-stat,
+  .admin-customer,
+  .admin-enquiry {
+    break-inside: avoid;
+    border: 1px solid #ddd !important;
+    color: black !important;
+    background: white !important;
+  }
+
+  .admin-status {
+    color: black !important;
+  }
+
+  .admin-heading h2,
+  .admin-list-heading h3,
+  .admin-analytics-heading h3 {
+    color: black !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-report-actions {
+    flex-direction: column;
+  }
+
+  .admin-report-actions button {
+    width: 100%;
+  }
+
+  .admin-enquiry-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-filter {
+    justify-content: flex-start;
+  }
+}
+
+
+
 
