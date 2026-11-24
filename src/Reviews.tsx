@@ -16,6 +16,7 @@ type Review = {
   name: string
   rating: number
   comment: string
+  adminReply?: string
 }
 
 export default function Reviews() {
@@ -30,7 +31,6 @@ export default function Reviews() {
   useEffect(() => {
     if (!db) return
 
-    // Public visitors can only read approved reviews.
     const reviewsQuery = query(
       collection(db, 'reviews'),
       where('status', '==', 'Approved'),
@@ -48,6 +48,7 @@ export default function Reviews() {
             name: data.name || 'Customer',
             rating: Number(data.rating) || 5,
             comment: data.comment || '',
+            adminReply: data.adminReply || '',
           }
         })
 
@@ -65,9 +66,7 @@ export default function Reviews() {
     event.preventDefault()
 
     if (!db) {
-      setMessage(
-        'Reviews are temporarily unavailable. Please try again later.'
-      )
+      setMessage('Reviews are temporarily unavailable. Please try again later.')
       return
     }
 
@@ -99,9 +98,7 @@ export default function Reviews() {
       setRating(5)
       setComment('')
 
-      setMessage(
-        'Thank you! Your review has been submitted for approval.'
-      )
+      setMessage('Thank you! Your review has been submitted for approval.')
     } catch (error) {
       console.error('Review submission failed:', error)
       setMessage('Your review could not be submitted. Please try again.')
@@ -128,9 +125,7 @@ export default function Reviews() {
           {reviews.length === 0 ? (
             <div className="review-empty">
               <MessageSquare size={30} />
-
               <h3>Be the first to share your experience</h3>
-
               <p>Approved customer reviews will appear here.</p>
             </div>
           ) : (
@@ -144,11 +139,7 @@ export default function Reviews() {
                     <Star
                       key={index}
                       size={17}
-                      fill={
-                        index < review.rating
-                          ? 'currentColor'
-                          : 'none'
-                      }
+                      fill={index < review.rating ? 'currentColor' : 'none'}
                     />
                   ))}
                 </div>
@@ -158,6 +149,17 @@ export default function Reviews() {
                 </p>
 
                 <h4>{review.name}</h4>
+
+                {review.adminReply && (
+                  <div className="review-company-reply">
+                    <div className="review-company-reply-heading">
+                      <MessageSquare size={16} />
+                      <strong>Rex Groups response</strong>
+                    </div>
+
+                    <p>{review.adminReply}</p>
+                  </div>
+                )}
               </article>
             ))
           )}
@@ -204,11 +206,7 @@ export default function Reviews() {
                 <button
                   type="button"
                   key={value}
-                  className={
-                    value <= rating
-                      ? 'rating-star active'
-                      : 'rating-star'
-                  }
+                  className={value <= rating ? 'rating-star active' : 'rating-star'}
                   onClick={() => setRating(value)}
                   aria-label={`${value} star${value === 1 ? '' : 's'}`}
                   aria-pressed={rating === value}
@@ -246,7 +244,6 @@ export default function Reviews() {
             disabled={loading}
           >
             <Send size={17} />
-
             {loading ? 'Submitting...' : 'Submit Review'}
           </button>
         </form>
