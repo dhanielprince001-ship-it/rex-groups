@@ -510,7 +510,8 @@ function App() {
           </div>
         </section>
 
-        <AuthSection />
+     <AuthSection />
+<AdminDashboard />
       </main>
 
       <footer className="footer">
