@@ -1,9 +1,9 @@
-
 import { useEffect, useState, type FormEvent } from 'react'
 import {
   addDoc,
   collection,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   where,
@@ -30,25 +30,26 @@ export default function Reviews() {
   useEffect(() => {
     if (!db) return
 
-    // Only request approved reviews: pending ones contain private emails.
+    // Public visitors can only read approved reviews.
     const reviewsQuery = query(
       collection(db, 'reviews'),
-      where('status', '==', 'Approved')
+      where('status', '==', 'Approved'),
+      orderBy('createdAt', 'desc')
     )
 
     const unsubscribe = onSnapshot(
       reviewsQuery,
       (snapshot) => {
-        const approvedReviews = snapshot.docs
-          .map((item) => ({
+        const approvedReviews: Review[] = snapshot.docs.map((item) => {
+          const data = item.data()
+
+          return {
             id: item.id,
-            name: item.data().name || 'Customer',
-            rating: item.data().rating || 5,
-            comment: item.data().comment || '',
-            time: item.data().createdAt?.toMillis?.() ?? Date.now(),
-          }))
-          .sort((a, b) => b.time - a.time)
-          .map(({ time: _time, ...review }) => review)
+            name: data.name || 'Customer',
+            rating: Number(data.rating) || 5,
+            comment: data.comment || '',
+          }
+        })
 
         setReviews(approvedReviews)
       },
@@ -64,7 +65,9 @@ export default function Reviews() {
     event.preventDefault()
 
     if (!db) {
-      setMessage('Reviews are temporarily unavailable. Please try again later.')
+      setMessage(
+        'Reviews are temporarily unavailable. Please try again later.'
+      )
       return
     }
 
@@ -95,7 +98,10 @@ export default function Reviews() {
       setEmail('')
       setRating(5)
       setComment('')
-      setMessage('Thank you! Your review has been submitted for approval.')
+
+      setMessage(
+        'Thank you! Your review has been submitted for approval.'
+      )
     } catch (error) {
       console.error('Review submission failed:', error)
       setMessage('Your review could not be submitted. Please try again.')
@@ -108,7 +114,9 @@ export default function Reviews() {
     <section className="reviews-section" id="reviews">
       <div className="reviews-heading">
         <span className="section-label">CUSTOMER FEEDBACK</span>
+
         <h2>What Our Customers Say</h2>
+
         <p>
           Your experience matters to us. Read customer feedback or share your
           experience with Rex Groups.
@@ -120,23 +128,35 @@ export default function Reviews() {
           {reviews.length === 0 ? (
             <div className="review-empty">
               <MessageSquare size={30} />
+
               <h3>Be the first to share your experience</h3>
+
               <p>Approved customer reviews will appear here.</p>
             </div>
           ) : (
             reviews.map((review) => (
               <article className="review-card" key={review.id}>
-                <div className="review-stars" aria-label={`${review.rating} out of 5 stars`}>
+                <div
+                  className="review-stars"
+                  aria-label={`${review.rating} out of 5 stars`}
+                >
                   {Array.from({ length: 5 }, (_, index) => (
                     <Star
                       key={index}
                       size={17}
-                      fill={index < review.rating ? 'currentColor' : 'none'}
+                      fill={
+                        index < review.rating
+                          ? 'currentColor'
+                          : 'none'
+                      }
                     />
                   ))}
                 </div>
 
-                <p className="review-comment">“{review.comment}”</p>
+                <p className="review-comment">
+                  “{review.comment}”
+                </p>
+
                 <h4>{review.name}</h4>
               </article>
             ))
@@ -145,9 +165,13 @@ export default function Reviews() {
 
         <form className="review-form" onSubmit={submitReview}>
           <h3>Share Your Experience</h3>
-          <p>Your review will be checked by our team before it appears publicly.</p>
+
+          <p>
+            Your review will be checked by our team before it appears publicly.
+          </p>
 
           <label htmlFor="review-name">Your name</label>
+
           <input
             id="review-name"
             type="text"
@@ -159,6 +183,7 @@ export default function Reviews() {
           />
 
           <label htmlFor="review-email">Email address</label>
+
           <input
             id="review-email"
             type="email"
@@ -170,6 +195,7 @@ export default function Reviews() {
           />
 
           <label>Your rating</label>
+
           <div className="rating-picker" aria-label="Choose a rating">
             {Array.from({ length: 5 }, (_, index) => {
               const value = index + 1
@@ -178,7 +204,11 @@ export default function Reviews() {
                 <button
                   type="button"
                   key={value}
-                  className={value <= rating ? 'rating-star active' : 'rating-star'}
+                  className={
+                    value <= rating
+                      ? 'rating-star active'
+                      : 'rating-star'
+                  }
                   onClick={() => setRating(value)}
                   aria-label={`${value} star${value === 1 ? '' : 's'}`}
                   aria-pressed={rating === value}
@@ -193,6 +223,7 @@ export default function Reviews() {
           </div>
 
           <label htmlFor="review-comment">Your review</label>
+
           <textarea
             id="review-comment"
             value={comment}
@@ -209,8 +240,13 @@ export default function Reviews() {
             </p>
           )}
 
-          <button className="review-submit" type="submit" disabled={loading}>
+          <button
+            className="review-submit"
+            type="submit"
+            disabled={loading}
+          >
             <Send size={17} />
+
             {loading ? 'Submitting...' : 'Submit Review'}
           </button>
         </form>
