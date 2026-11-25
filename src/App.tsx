@@ -6,6 +6,7 @@ import HomePage from './HomePage'
 import MarketplacePage from './MarketplacePage'
 import MarketplaceHome from './MarketplaceHome'
 import MarketplaceCart from './MarketplaceCart'
+import MarketplaceStore from './MarketplaceStore'
 import { CartProvider } from './CartContext'
 
 function NotFound() {
@@ -29,16 +30,21 @@ function MarketplacePlaceholder({ title }: { title: string }) {
           <span className="rex-market-brand-mark">R<span>.</span></span>
           <span>REX <b>MARKETPLACE</b></span>
         </Link>
+
         <Link to="/marketplace">Back to marketplace</Link>
       </header>
 
       <section className="rex-market-placeholder-content">
-        <span className="rex-market-eyebrow">REX GROUPS MARKETPLACE</span>
+        <span className="rex-market-eyebrow">
+          REX GROUPS MARKETPLACE
+        </span>
+
         <h1>{title}</h1>
+
         <p>
           This page is the next part of the marketplace build.
-          The public marketplace and seller dashboard are now separate.
         </p>
+
         <Link className="rex-market-primary-link" to="/marketplace">
           Explore marketplace
         </Link>
@@ -57,17 +63,27 @@ export default function App() {
         </Route>
 
         <Route path="/marketplace" element={<MarketplaceHome />} />
-        <Route path="/marketplace/cart" element={<MarketplaceCart />} />
-        <Route path="/marketplace/seller" element={<MarketplacePage />} />
+
+        <Route
+          path="/marketplace/cart"
+          element={<MarketplaceCart />}
+        />
+
+        <Route
+          path="/marketplace/seller"
+          element={<MarketplacePage />}
+        />
 
         <Route
           path="/marketplace/store/:storeId"
-          element={<MarketplacePlaceholder title="Store page coming next." />}
+          element={<MarketplaceStore />}
         />
 
         <Route
           path="/marketplace/product/:productId"
-          element={<MarketplacePlaceholder title="Product page coming next." />}
+          element={
+            <MarketplacePlaceholder title="Product page coming next." />
+          }
         />
       </Routes>
     </CartProvider>
