@@ -8,6 +8,7 @@ import MarketplaceHome from './MarketplaceHome'
 import MarketplaceCart from './MarketplaceCart'
 import MarketplaceStore from './MarketplaceStore'
 import { CartProvider } from './CartContext'
+import MarketplaceCheckout from './MarketplaceCheckout'
 
 function NotFound() {
   return (
@@ -75,9 +76,17 @@ export default function App() {
         />
 
         <Route
+  path="/marketplace/checkout"
+  element={<MarketplaceCheckout />}
+/>
+        
+
+        <Route
           path="/marketplace/store/:storeId"
           element={<MarketplaceStore />}
         />
+
+        
 
         <Route
           path="/marketplace/product/:productId"
