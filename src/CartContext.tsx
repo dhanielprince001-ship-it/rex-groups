@@ -26,10 +26,39 @@ const CartContext = createContext<CartContextType | null>(null)
 
 const STORAGE_KEY = 'rexgroups-marketplace-cart'
 
+// The order API rejects quantities above 20, so the cart enforces it too.
+const MAX_QUANTITY = 20
+
+function isCartItem(value: unknown): value is CartItem {
+  if (typeof value !== 'object' || value === null) return false
+
+  const item = value as Record<string, unknown>
+
+  return (
+    typeof item.id === 'string' &&
+    typeof item.name === 'string' &&
+    typeof item.price === 'number' &&
+    Number.isFinite(item.price) &&
+    typeof item.storeId === 'string' &&
+    typeof item.storeName === 'string' &&
+    typeof item.quantity === 'number' &&
+    Number.isInteger(item.quantity) &&
+    item.quantity >= 1
+  )
+}
+
 function loadCart(): CartItem[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) as CartItem[] : []
+    const parsed: unknown = saved ? JSON.parse(saved) : []
+
+    if (!Array.isArray(parsed)) return []
+
+    return parsed.filter(isCartItem).map((item) => ({
+      ...item,
+      imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : '',
+      quantity: Math.min(item.quantity, MAX_QUANTITY),
+    }))
   } catch {
     return []
   }
@@ -39,7 +68,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(loadCart)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    } catch {
+      // Storage unavailable (private mode or full): keep the cart in memory.
+    }
   }, [items])
 
   function addItem(item: Omit<CartItem, 'quantity'>) {
@@ -49,7 +82,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (existing) {
         return current.map((entry) =>
           entry.id === item.id
-            ? { ...entry, quantity: entry.quantity + 1 }
+            ? {
+              ...entry,
+              quantity: Math.min(entry.quantity + 1, MAX_QUANTITY),
+            }
             : entry,
         )
       }
@@ -61,9 +97,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   function updateQuantity(id: string, quantity: number) {
     if (quantity < 1) return
 
+    const safeQuantity = Math.min(quantity, MAX_QUANTITY)
+
     setItems((current) =>
       current.map((item) =>
-        item.id === id ? { ...item, quantity } : item,
+        item.id === id ? { ...item, quantity: safeQuantity } : item,
       ),
     )
   }
