@@ -6242,5 +6242,30 @@ h2 em {
   font-size: 1.05rem;
 }
 
+/* SHARED MARKETPLACE THEME BUTTON */
 
+.rex-market-theme-toggle {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line, #888);
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.rex-market-theme-toggle:hover {
+  background: var(--surface, rgba(128, 128, 128, 0.15));
+  transform: translateY(-2px);
+}
+
+.marketplace-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 
