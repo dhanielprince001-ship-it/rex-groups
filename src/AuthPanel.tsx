@@ -615,11 +615,15 @@ export function AuthSection() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function returnToCheckout() {
+  function returnToPreviousPage() {
     const params = new URLSearchParams(location.search)
     const returnTo = params.get('returnTo')
 
-    if (returnTo === '/marketplace/checkout') {
+    // Only known internal pages are allowed (no open redirects).
+    if (
+      returnTo === '/marketplace/checkout' ||
+      returnTo === '/marketplace/seller'
+    ) {
       navigate(returnTo, { replace: true })
     }
   }
@@ -651,7 +655,13 @@ export function AuthSection() {
           })
         }
 
-        await syncCustomerProfile(result.user)
+        // The account already exists at this point, so a profile sync
+        // problem must not look like a failed registration.
+        try {
+          await syncCustomerProfile(result.user)
+        } catch (syncError) {
+          console.error('Customer profile sync failed:', syncError)
+        }
 
         setNotice('Your account has been created.')
       } else {
@@ -665,7 +675,7 @@ export function AuthSection() {
       }
 
       setPassword('')
-      returnToCheckout()
+      returnToPreviousPage()
     } catch (error) {
       setNotice(
         friendlyError(error, 'Something went wrong.'),
@@ -697,7 +707,7 @@ export function AuthSection() {
         }!`,
       )
 
-      returnToCheckout()
+      returnToPreviousPage()
     } catch (error) {
       setNotice(
         friendlyError(error, 'Google sign-in failed.'),
