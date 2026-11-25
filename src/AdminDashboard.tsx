@@ -38,13 +38,12 @@ import {
 
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
+import { EMAILJS_PUBLIC_KEY, EMAILJS_SERVICE_ID } from './siteConfig'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
-// EmailJS configuration
-const EMAILJS_SERVICE_ID = 'service_o4p3v01'
+// EmailJS configuration (service and public key are shared in siteConfig)
 const EMAILJS_REPLY_TEMPLATE_ID = 'template_e2pq1x7'
-const EMAILJS_PUBLIC_KEY = '0NkqQxyu5RfJ2UFXl'
 
 type EnquiryStatus = 'Pending' | 'Contacted' | 'Completed'
 type FilterStatus = 'All' | EnquiryStatus
