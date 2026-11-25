@@ -12,6 +12,7 @@ import MarketplaceCheckout from './MarketplaceCheckout'
 import MarketplaceOrders from './MarketplaceOrders'
 import TrackOrderButton from './TrackOrderButton'
 import { CartProvider } from './CartContext'
+import { ThemeProvider } from './ThemeContext'
 
 const BASE_TITLE = 'Rex Groups'
 
@@ -162,6 +163,7 @@ export default function App() {
   return (
     <CartProvider>
       <RouteEffects />
+        <ThemeProvider>
 
       <Routes>
         {/* CORPORATE WEBSITE - NO FLOATING TRACKING BUTTON */}
@@ -239,7 +241,10 @@ export default function App() {
             </MarketplaceRoute>
           }
         />
-      </Routes>
-    </CartProvider>
+         </Routes>
+      </CartProvider>
+    </ThemeProvider>
+  )
+}
   )
 }
