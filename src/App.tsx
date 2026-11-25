@@ -85,6 +85,12 @@ export default function App() {
             <MarketplacePlaceholder title="Product page coming next." />
           }
         />
+
+        <Route
+  path="/marketplace/cart"
+  element={<MarketplaceCart />}
+/>
+        
       </Routes>
     </CartProvider>
   )
