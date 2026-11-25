@@ -1,0 +1,354 @@
+
+import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+
+const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
+
+const COLLECTIONS = [
+  'orders',
+  'sellerOrders',
+  'transactions',
+  'refunds',
+  'disputes',
+] as const
+
+function adminApp() {
+  if (getApps().length) return getApps()[0]
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT
+
+  if (!raw) {
+    throw new Error('Firebase credentials are missing.')
+  }
+
+  return initializeApp({
+    credential: cert(JSON.parse(raw)),
+  })
+}
+
+function serialize(value: any): any {
+  if (value && typeof value.toDate === 'function') {
+    return {
+      seconds: Math.floor(value.toDate().getTime() / 1000),
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(serialize)
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        serialize(item),
+      ]),
+    )
+  }
+
+  return value
+}
+
+function validStatus(value: unknown, allowed: string[]) {
+  return typeof value === 'string' && allowed.includes(value)
+}
+
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse,
+) {
+  res.setHeader('Cache-Control', 'no-store')
+
+  if (!['GET', 'PATCH', 'POST'].includes(req.method || '')) {
+    res.setHeader('Allow', 'GET, PATCH, POST')
+    return res.status(405).json({
+      error: 'Method not allowed.',
+    })
+  }
+
+  try {
+    const authorization = req.headers.authorization
+
+    if (!authorization?.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Sign in required.',
+      })
+    }
+
+    const app = adminApp()
+
+    const decoded = await getAuth(app).verifyIdToken(
+      authorization.slice(7),
+    )
+
+    if (decoded.uid !== ADMIN_UID) {
+      return res.status(403).json({
+        error: 'Administrator access required.',
+      })
+    }
+
+    const db = getFirestore(app)
+
+    // LOAD ADMIN MARKETPLACE DATA
+    if (req.method === 'GET') {
+      const names = [
+        'stores',
+        'profiles',
+        ...COLLECTIONS,
+      ]
+
+      const snapshots = await Promise.all(
+        names.map((name) =>
+          db
+            .collection(name)
+            .orderBy('createdAt', 'desc')
+            .limit(300)
+            .get()
+            .catch(() => null),
+        ),
+      )
+
+      const result: Record<string, any[]> = {}
+
+      names.forEach((name, index) => {
+        result[name] =
+          snapshots[index]?.docs.map((item) => ({
+            id: item.id,
+            ...serialize(item.data()),
+          })) || []
+      })
+
+      const settings = await db
+        .collection('settings')
+        .doc('marketplace')
+        .get()
+
+      const configured = settings.data()?.commissionPercent
+
+      result.settings = [
+        {
+          commissionPercent:
+            typeof configured === 'number' &&
+            configured >= 0 &&
+            configured <= 100
+              ? configured
+              : 10,
+        },
+      ]
+
+      return res.status(200).json({
+        success: true,
+        ...result,
+      })
+    }
+
+    const body = req.body || {}
+
+    // UPDATE MARKETPLACE COMMISSION
+    if (
+      req.method === 'PATCH' &&
+      body.action === 'commission'
+    ) {
+      const percent = Number(body.commissionPercent)
+
+      if (
+        !Number.isFinite(percent) ||
+        percent < 0 ||
+        percent > 100
+      ) {
+        return res.status(400).json({
+          error: 'Commission must be between 0 and 100.',
+        })
+      }
+
+      await db
+        .collection('settings')
+        .doc('marketplace')
+        .set(
+          {
+            commissionPercent: percent,
+            updatedAt: FieldValue.serverTimestamp(),
+            updatedBy: decoded.uid,
+          },
+          { merge: true },
+        )
+
+      return res.status(200).json({
+        success: true,
+        commissionPercent: percent,
+      })
+    }
+
+    // MANAGE STORE STATUS
+    if (
+      req.method === 'PATCH' &&
+      body.action === 'storeStatus'
+    ) {
+      if (
+        typeof body.storeId !== 'string' ||
+        !validStatus(body.status, [
+          'Approved',
+          'Rejected',
+          'Suspended',
+          'Pending',
+        ])
+      ) {
+        return res.status(400).json({
+          error: 'Invalid store update.',
+        })
+      }
+
+      const ref = db.collection('stores').doc(body.storeId)
+      const snap = await ref.get()
+
+      if (!snap.exists) {
+        return res.status(404).json({
+          error: 'Store not found.',
+        })
+      }
+
+      await ref.update({
+        status: body.status,
+        updatedAt: FieldValue.serverTimestamp(),
+        adminUpdatedAt: FieldValue.serverTimestamp(),
+        adminUpdatedBy: decoded.uid,
+      })
+
+      return res.status(200).json({
+        success: true,
+      })
+    }
+
+    // CREATE A REFUND REQUEST RECORD
+    if (
+      req.method === 'POST' &&
+      body.action === 'createRefundRequest'
+    ) {
+      if (
+        typeof body.orderId !== 'string' ||
+        typeof body.reason !== 'string' ||
+        body.reason.trim().length < 5 ||
+        body.reason.length > 1500
+      ) {
+        return res.status(400).json({
+          error: 'Provide an order ID and a reason.',
+        })
+      }
+
+      const order = await db
+        .collection('orders')
+        .doc(body.orderId)
+        .get()
+
+      if (!order.exists) {
+        return res.status(404).json({
+          error: 'Order not found.',
+        })
+      }
+
+      const data = order.data()!
+
+      if (data.paymentStatus !== 'Paid') {
+        return res.status(400).json({
+          error: 'Only paid orders can have refund cases logged.',
+        })
+      }
+
+      const refundRef = db.collection('refunds').doc()
+
+      await refundRef.set({
+        orderId: body.orderId,
+        customerId: data.customerId || '',
+        amount: Number(data.subtotal || 0),
+        currency: data.currency || 'NGN',
+        reason: body.reason.trim(),
+        status: 'Requested',
+        source: 'admin',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdBy: decoded.uid,
+      })
+
+      return res.status(201).json({
+        success: true,
+        refundId: refundRef.id,
+      })
+    }
+
+    // UPDATE REFUND OR DISPUTE CASE STATUS
+    if (
+      req.method === 'PATCH' &&
+      body.action === 'caseStatus'
+    ) {
+      const collectionName =
+        body.caseType === 'refund'
+          ? 'refunds'
+          : body.caseType === 'dispute'
+            ? 'disputes'
+            : ''
+
+      const allowed =
+        body.caseType === 'refund'
+          ? [
+              'Requested',
+              'Under Review',
+              'Approved',
+              'Rejected',
+              'Processing',
+              'Failed',
+            ]
+          : [
+              'Open',
+              'Under Review',
+              'Evidence Submitted',
+              'Won',
+              'Lost',
+              'Closed',
+            ]
+
+      if (
+        !collectionName ||
+        typeof body.caseId !== 'string' ||
+        !validStatus(body.status, allowed)
+      ) {
+        return res.status(400).json({
+          error: 'Invalid case update.',
+        })
+      }
+
+      const ref = db
+        .collection(collectionName)
+        .doc(body.caseId)
+
+      const snap = await ref.get()
+
+      if (!snap.exists) {
+        return res.status(404).json({
+          error: 'Case not found.',
+        })
+      }
+
+      await ref.update({
+        status: body.status,
+        updatedAt: FieldValue.serverTimestamp(),
+        adminUpdatedBy: decoded.uid,
+      })
+
+      return res.status(200).json({
+        success: true,
+      })
+    }
+
+    return res.status(400).json({
+      error: 'Unsupported admin action.',
+    })
+  } catch (error) {
+    console.error('Admin marketplace API error:', error)
+
+    return res.status(500).json({
+      error: 'Unable to complete the admin request.',
+    })
+  }
+}
