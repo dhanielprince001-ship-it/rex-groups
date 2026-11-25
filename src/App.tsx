@@ -86,10 +86,7 @@ export default function App() {
           }
         />
 
-        <Route
-  path="/marketplace/cart"
-  element={<MarketplaceCart />}
-/>
+        
         
       </Routes>
     </CartProvider>
