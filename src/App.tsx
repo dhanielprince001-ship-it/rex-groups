@@ -3,18 +3,14 @@ import { Link, Route, Routes } from 'react-router-dom'
 import SiteLayout from './SiteLayout'
 import HomePage from './HomePage'
 import MarketplacePage from './MarketplacePage'
+import MarketplaceHome from './MarketplaceHome'
 
 function NotFound() {
   return (
     <section className="section-wrap section-block not-found">
       <div className="section-kicker">404</div>
-
-      <h2>
-        Page <em>not found.</em>
-      </h2>
-
+      <h2>Page <em>not found.</em></h2>
       <p>The page you are looking for does not exist or has moved.</p>
-
       <Link className="button button-primary" to="/">
         Back to home
       </Link>
@@ -22,14 +18,72 @@ function NotFound() {
   )
 }
 
+function MarketplacePlaceholder({ title }: { title: string }) {
+  return (
+    <main className="rex-marketplace rex-marketplace-placeholder">
+      <header className="rex-market-header">
+        <Link className="rex-market-brand" to="/marketplace">
+          <span className="rex-market-brand-mark">
+            R<span>.</span>
+          </span>
+          <span>
+            REX <b>MARKETPLACE</b>
+          </span>
+        </Link>
+
+        <Link to="/marketplace">Back to marketplace</Link>
+      </header>
+
+      <section className="rex-market-placeholder-content">
+        <span className="rex-market-eyebrow">
+          REX GROUPS MARKETPLACE
+        </span>
+
+        <h1>{title}</h1>
+
+        <p>
+          This page is the next part of the marketplace build.
+          The public marketplace and seller dashboard are now separate.
+        </p>
+
+        <Link className="rex-market-primary-link" to="/marketplace">
+          Explore marketplace
+        </Link>
+      </section>
+    </main>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
+      {/* Corporate website keeps its own layout and navigation. */}
       <Route element={<SiteLayout />}>
         <Route index element={<HomePage />} />
-        <Route path="marketplace" element={<MarketplacePage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
+
+      {/* Marketplace is an independent website experience. */}
+      <Route path="/marketplace" element={<MarketplaceHome />} />
+
+      <Route
+        path="/marketplace/seller"
+        element={<MarketplacePage />}
+      />
+
+      <Route
+        path="/marketplace/store/:storeId"
+        element={
+          <MarketplacePlaceholder title="Store page coming next." />
+        }
+      />
+
+      <Route
+        path="/marketplace/product/:productId"
+        element={
+          <MarketplacePlaceholder title="Product page coming next." />
+        }
+      />
     </Routes>
   )
 }
