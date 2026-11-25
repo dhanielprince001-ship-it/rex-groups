@@ -6183,3 +6183,41 @@ h2 em {
   color: var(--rm-muted);
   font-size: 11px;
 }
+
+/* Floating "Track my order" button, shown on every page */
+.rex-track-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 999;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #b7e84b;
+  color: #171b19;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rex-track-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
+.rex-track-fab:focus-visible {
+  outline: 3px solid #171b19;
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  .rex-track-fab {
+    right: 12px;
+    bottom: 12px;
+    padding: 12px 14px;
+  }
+}
