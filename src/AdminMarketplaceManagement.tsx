@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -12,9 +13,31 @@ import { useAuth } from './AuthPanel'
 
 type Row = Record<string, any> & { id: string }
 
+type StoreRow = Row & {
+  name?: string
+  ownerId?: string
+  ownerName?: string
+  email?: string
+  status?: string
+}
+
+type ProfileRow = Row & {
+  uid?: string
+  email?: string
+  name?: string
+  fullName?: string
+}
+
+type SellerRow = StoreRow & {
+  sellerEmail: string
+  sellerName: string
+  orderCount: number
+  sellerEarnings: number
+}
+
 type Payload = {
-  stores: Row[]
-  profiles: Row[]
+  stores: StoreRow[]
+  profiles: ProfileRow[]
   orders: Row[]
   sellerOrders: Row[]
   transactions: Row[]
@@ -102,7 +125,16 @@ export default function AdminMarketplaceManagement() {
     try {
       const result = (await request('GET')) as Payload
 
-      setData(result)
+      setData({
+        stores: result.stores || [],
+        profiles: result.profiles || [],
+        orders: result.orders || [],
+        sellerOrders: result.sellerOrders || [],
+        transactions: result.transactions || [],
+        refunds: result.refunds || [],
+        disputes: result.disputes || [],
+        settings: result.settings || [{ commissionPercent: 10 }],
+      })
 
       setCommission(
         String(result.settings?.[0]?.commissionPercent ?? 10),
@@ -145,15 +177,15 @@ export default function AdminMarketplaceManagement() {
     (store) => store.status === 'Pending',
   ).length
 
-  const sellers = useMemo(
+  const sellers: SellerRow[] = useMemo(
     () =>
-      data.stores.map((store) => {
-        const profile =
+      data.stores.map((store): SellerRow => {
+        const profile: ProfileRow =
           data.profiles.find(
             (item) =>
               item.id === store.ownerId ||
               item.uid === store.ownerId,
-          ) || {}
+          ) || ({} as ProfileRow)
 
         const sellerOrders = data.sellerOrders.filter(
           (order) => order.sellerId === store.ownerId,
@@ -161,10 +193,12 @@ export default function AdminMarketplaceManagement() {
 
         return {
           ...store,
-          sellerEmail:
-            profile.email || store.email || '—',
+          sellerEmail: profile.email || store.email || '—',
           sellerName:
-            profile.name || store.ownerName || 'Seller',
+            profile.name ||
+            profile.fullName ||
+            store.ownerName ||
+            'Seller',
           orderCount: sellerOrders.length,
           sellerEarnings: sellerOrders
             .filter((order) => order.paymentStatus === 'Paid')
@@ -437,14 +471,14 @@ export default function AdminMarketplaceManagement() {
                 {sellers.map((seller) => (
                   <tr key={seller.id}>
                     <td>
-                      <strong>{seller.name}</strong>
+                      <strong>{seller.name || 'Unnamed store'}</strong>
                       <small>
                         {seller.sellerName} · {seller.ownerId}
                       </small>
                     </td>
 
                     <td>{seller.sellerEmail}</td>
-                    <td>{seller.status}</td>
+                    <td>{seller.status || 'Unknown'}</td>
                     <td>{seller.orderCount}</td>
                     <td>
                       {money.format(seller.sellerEarnings)}
