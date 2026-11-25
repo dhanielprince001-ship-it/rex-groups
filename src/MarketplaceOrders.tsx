@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  MapPin,
   MessageSquare,
   Package,
   RefreshCw,
@@ -40,13 +41,18 @@ type OrderPackage = {
 type BuyerOrder = {
   id: string
   subtotal: number
+  deliveryFee?: number | null
+  status?: string
+  paymentStatus?: string
   createdAt: Seconds
   shippingAddress: {
     fullName?: string
+    phone?: string
     streetAddress?: string
     city?: string
     state?: string
     country?: string
+    postalCode?: string
   } | null
   packages: OrderPackage[]
 }
@@ -92,6 +98,30 @@ function formatDate(value: Seconds) {
     : 'Date unavailable'
 }
 
+// Date shown under a tracker step, or nothing when it is not known yet.
+function stepDate(value: Seconds) {
+  return value?.seconds
+    ? new Date(value.seconds * 1000).toLocaleDateString()
+    : ''
+}
+
+// A failed or non-JSON response (for example a missing API route) must not
+// throw, so the orders list keeps working even if enquiries fail to load.
+async function readJson(response: Response) {
+  try {
+    return (await response.json()) as Record<string, unknown>
+  } catch {
+    return {} as Record<string, unknown>
+  }
+}
+
+function paymentClass(status: string | undefined) {
+  if (status === 'Paid') return 'paid'
+  if (status === 'Partially Paid') return 'partial'
+
+  return 'unpaid'
+}
+
 function Header({ right }: { right: ReactNode }) {
   return (
     <header className="rex-market-header">
@@ -132,19 +162,27 @@ export default function MarketplaceOrders() {
         }),
       ])
 
-      const orderData = await orderResponse.json()
-      const enquiryData = await enquiryResponse.json()
+      const orderData = await readJson(orderResponse)
+      const enquiryData = await readJson(enquiryResponse)
 
       if (!orderResponse.ok) {
-        throw new Error(orderData.error || 'Unable to load your orders.')
+        throw new Error(
+          typeof orderData.error === 'string'
+            ? orderData.error
+            : 'Unable to load your orders.',
+        )
       }
 
-      setOrders(Array.isArray(orderData.orders) ? orderData.orders : [])
+      setOrders(
+        Array.isArray(orderData.orders)
+          ? (orderData.orders as BuyerOrder[])
+          : [],
+      )
 
       // Enquiries are secondary: a failure here should not hide orders.
       setEnquiries(
         enquiryResponse.ok && Array.isArray(enquiryData.enquiries)
-          ? enquiryData.enquiries
+          ? (enquiryData.enquiries as BuyerEnquiry[])
           : [],
       )
     } catch (err) {
@@ -278,6 +316,41 @@ export default function MarketplaceOrders() {
                     <strong>{money.format(order.subtotal)}</strong>
                   </div>
 
+                  <div className="rex-order-badges">
+                    <span className="rex-package-status">
+                      {order.status || 'Awaiting Payment'}
+                    </span>
+                    <span
+                      className={`rex-pay-badge ${paymentClass(order.paymentStatus)}`}
+                    >
+                      Payment: {order.paymentStatus || 'Unpaid'}
+                    </span>
+                  </div>
+
+                  {order.shippingAddress && (
+                    <div className="rex-delivery">
+                      <MapPin size={16} />
+                      <div>
+                        <strong>Delivering to</strong>
+                        <p>
+                          {[
+                            order.shippingAddress.fullName,
+                            order.shippingAddress.streetAddress,
+                            order.shippingAddress.city,
+                            order.shippingAddress.state,
+                            order.shippingAddress.postalCode,
+                            order.shippingAddress.country,
+                          ]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </p>
+                        {order.shippingAddress.phone && (
+                          <small>Phone: {order.shippingAddress.phone}</small>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {order.packages.length === 0 && (
                     <p className="rex-order-note">
                       Your order is being prepared. Check back shortly.
@@ -287,6 +360,15 @@ export default function MarketplaceOrders() {
                   {order.packages.map((pack) => {
                     const done = PROGRESS[pack.status] ?? 1
 
+                    // Matches STEPS: placed, paid, processing, shipped, delivered.
+                    const stepDates = [
+                      stepDate(order.createdAt),
+                      stepDate(pack.paidAt),
+                      '',
+                      stepDate(pack.shippedAt),
+                      stepDate(pack.deliveredAt),
+                    ]
+
                     return (
                       <div className="rex-package" key={pack.id}>
                         <div className="rex-package-head">
@@ -295,6 +377,18 @@ export default function MarketplaceOrders() {
                             {pack.status}
                           </span>
                         </div>
+
+                        <p className="rex-package-pay">
+                          <span
+                            className={`rex-pay-badge ${paymentClass(pack.paymentStatus)}`}
+                          >
+                            {pack.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid'}
+                          </span>
+                          {pack.paidAt?.seconds ? (
+                            <small>Confirmed {formatDate(pack.paidAt)}</small>
+                          ) : null}
+                          <b>{money.format(pack.subtotal)}</b>
+                        </p>
 
                         <ul className="rex-package-items">
                           {pack.items.map((item, index) => (
@@ -337,6 +431,9 @@ export default function MarketplaceOrders() {
                                 )}
                               </i>
                               <span>{step}</span>
+                              {index < done && stepDates[index] && (
+                                <small>{stepDates[index]}</small>
+                              )}
                             </li>
                           ))}
                         </ol>
@@ -358,11 +455,17 @@ export default function MarketplaceOrders() {
                           </p>
                         )}
 
-                        {pack.deliveredAt?.seconds && (
+                        {pack.shippedAt?.seconds && !pack.deliveredAt?.seconds ? (
+                          <p className="rex-order-note">
+                            Shipped {formatDate(pack.shippedAt)}
+                          </p>
+                        ) : null}
+
+                        {pack.deliveredAt?.seconds ? (
                           <p className="rex-order-note">
                             Delivered {formatDate(pack.deliveredAt)}
                           </p>
-                        )}
+                        ) : null}
 
                         <Link
                           className="rex-order-contact"
