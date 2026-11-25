@@ -79,7 +79,9 @@ type SellerOrder = {
   items: {
     productId: string
     name: string
-    price: number
+    unitPrice?: number
+    price?: number
+    lineTotal?: number
     quantity: number
     imageUrl?: string
   }[]
@@ -859,7 +861,10 @@ export default function Marketplace() {
             Sign in to your Rex Groups account before applying
             to become a marketplace seller.
           </p>
-          <Link to="/#account" className="marketplace-button">
+          <Link
+            to="/?returnTo=%2Fmarketplace%2Fseller#account"
+            className="marketplace-button"
+          >
             Sign In or Register
           </Link>
         </div>
@@ -1235,7 +1240,7 @@ export default function Marketplace() {
                           <div>
                             <strong>{item.name}</strong>
                             <p>Quantity: {item.quantity}</p>
-                            <p>{naira.format(item.price)}</p>
+                            <p>{naira.format(item.unitPrice ?? item.price ?? 0)}</p>
                           </div>
                         </div>
                       ))}
