@@ -10,6 +10,7 @@ import MarketplaceCart from './MarketplaceCart'
 import MarketplaceStore from './MarketplaceStore'
 import MarketplaceCheckout from './MarketplaceCheckout'
 import MarketplaceOrders from './MarketplaceOrders'
+import TrackOrderButton from './TrackOrderButton'
 import { CartProvider } from './CartContext'
 
 const BASE_TITLE = 'Rex Groups'
@@ -151,6 +152,7 @@ export default function App() {
   return (
     <CartProvider>
       <RouteEffects />
+      <TrackOrderButton />
 
       <Routes>
         {/* CORPORATE WEBSITE */}
