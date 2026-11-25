@@ -8,7 +8,11 @@ import {
   type ReactNode,
 } from 'react'
 
-import { Link } from 'react-router-dom'
+import {
+  Link,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 
 import {
   onAuthStateChanged,
@@ -598,14 +602,27 @@ function AccountCenter({ user }: { user: User }) {
 
 // MAIN AUTH SECTION
 
+
 export function AuthSection() {
   const { user, ready, notice, setNotice } = useAuth()
+
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+
+  function returnToCheckout() {
+    const params = new URLSearchParams(location.search)
+    const returnTo = params.get('returnTo')
+
+    if (returnTo === '/marketplace/checkout') {
+      navigate(returnTo, { replace: true })
+    }
+  }
 
   async function handleSubmit(
     e: FormEvent<HTMLFormElement>,
@@ -648,6 +665,7 @@ export function AuthSection() {
       }
 
       setPassword('')
+      returnToCheckout()
     } catch (error) {
       setNotice(
         friendlyError(error, 'Something went wrong.'),
@@ -678,6 +696,8 @@ export function AuthSection() {
           'you'
         }!`,
       )
+
+      returnToCheckout()
     } catch (error) {
       setNotice(
         friendlyError(error, 'Google sign-in failed.'),
