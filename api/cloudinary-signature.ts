@@ -46,27 +46,47 @@ export default async function handler(
     const app = getFirebaseAdmin()
 
     const decodedToken = await getAuth(app).verifyIdToken(idToken)
+    const uid = decodedToken.uid
 
-    const storeSnapshot = await getFirestore(app)
-      .collection('stores')
-      .doc(decodedToken.uid)
-      .get()
+    // Existing requests default to product uploads.
+    const purpose = req.body?.purpose || 'product'
 
-    if (!storeSnapshot.exists) {
-      return res.status(403).json({
-        error: 'Store not found'
+    if (purpose !== 'product' && purpose !== 'store') {
+      return res.status(400).json({
+        error: 'Invalid upload purpose'
       })
     }
 
-    const store = storeSnapshot.data()
+    const storeSnapshot = await getFirestore(app)
+      .collection('stores')
+      .doc(uid)
+      .get()
 
-    if (
-      store?.ownerId !== decodedToken.uid ||
-      store?.status !== 'Approved'
-    ) {
-      return res.status(403).json({
-        error: 'Approved store required'
-      })
+    const store = storeSnapshot.exists
+      ? storeSnapshot.data()
+      : null
+
+    if (purpose === 'product') {
+      if (
+        !store ||
+        store.ownerId !== uid ||
+        store.status !== 'Approved'
+      ) {
+        return res.status(403).json({
+          error: 'An approved store is required for product uploads'
+        })
+      }
+    }
+
+    if (purpose === 'store' && store) {
+      if (
+        store.ownerId !== uid ||
+        !['Pending', 'Approved'].includes(store.status)
+      ) {
+        return res.status(403).json({
+          error: 'This store cannot upload profile images'
+        })
+      }
     }
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME
@@ -74,6 +94,8 @@ export default async function handler(
     const apiSecret = process.env.CLOUDINARY_API_SECRET
 
     if (!cloudName || !apiKey || !apiSecret) {
+      console.error('Cloudinary environment variables are missing')
+
       return res.status(500).json({
         error: 'Cloudinary configuration is incomplete'
       })
@@ -86,7 +108,11 @@ export default async function handler(
     })
 
     const timestamp = Math.floor(Date.now() / 1000)
-    const folder = `rexgroups/products/${decodedToken.uid}`
+
+    const folder =
+      purpose === 'store'
+        ? `rexgroups/stores/${uid}`
+        : `rexgroups/products/${uid}`
 
     const uploadParameters = {
       timestamp,
@@ -110,8 +136,8 @@ export default async function handler(
   } catch (error) {
     console.error('Cloudinary signing error:', error)
 
-    return res.status(401).json({
-      error: 'Unable to authorise this upload'
+    return res.status(500).json({
+      error: 'Unable to prepare this image upload'
     })
   }
 }
