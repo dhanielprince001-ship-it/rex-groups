@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { ArrowUpRight, Sun, Moon, Mail } from 'lucide-react'
+import { useTheme } from './ThemeContext'
 
 import { AuthButton } from './AuthPanel'
 import { EMAIL, NAV_LINKS, SOCIALS } from './siteConfig'
@@ -56,7 +57,7 @@ export default function SiteLayout() {
   const { pathname } = useLocation()
   const isMobile = useIsMobile()
 
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
+  const { theme, toggleTheme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(!loaderAlreadyShown)
 
@@ -228,9 +229,7 @@ export default function SiteLayout() {
             aria-label={`Switch to ${
               theme === 'dark' ? 'light' : 'dark'
             } theme`}
-            onClick={() =>
-              setTheme(theme === 'dark' ? 'light' : 'dark')
-            }
+            onClick={toggleTheme}
           >
             {theme === 'dark' ? (
               <Sun size={18} aria-hidden="true" />
