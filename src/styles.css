@@ -2641,6 +2641,8 @@ h2 em {
   letter-spacing: 2px;
 }
 
+.marketplace-heading h1,
+
 .marketplace-heading h2 {
   margin: 0 0 16px;
   font-size: clamp(32px, 5vw, 52px);
@@ -2894,6 +2896,8 @@ h2 em {
     margin-bottom: 30px;
   }
 
+  .marketplace-heading h1,
+
   .marketplace-heading h2 {
     letter-spacing: -1px;
   }
@@ -2944,6 +2948,8 @@ h2 em {
   font-weight: 800;
   letter-spacing: 2px;
 }
+
+.marketplace-heading h1,
 
 .marketplace-heading h2 {
   margin: 0 0 14px;
@@ -3479,6 +3485,8 @@ h2 em {
     margin-bottom: 30px;
   }
 
+  .marketplace-heading h1,
+
   .marketplace-heading h2 {
     letter-spacing: -1px;
   }
@@ -3541,3 +3549,77 @@ h2 em {
 }
 
 
+
+
+/* ================================
+   MULTI-PAGE ROUTING ADDITIONS
+================================ */
+
+.nav a[aria-current='page'] {
+  color: var(--accentInk);
+}
+
+.marketplace-page {
+  min-height: calc(100vh - 86px);
+  min-height: calc(100dvh - 86px);
+}
+
+.marketplace-page .marketplace-section {
+  padding-top: 70px;
+}
+
+/* Marketplace promo on the home page */
+.market-teaser {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 36px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.market-teaser-icon {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: var(--accentInk);
+}
+
+.market-teaser-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.market-teaser-copy h2 {
+  margin: 8px 0 10px;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -1.2px;
+}
+
+.market-teaser-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .market-teaser {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 26px 22px;
+  }
+}
+
+/* 404 page */
+.not-found {
+  min-height: 60vh;
+}
+
+.not-found p {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
