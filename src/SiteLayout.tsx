@@ -13,11 +13,6 @@ type Theme = 'dark' | 'light'
 
 const MOBILE_QUERY = '(max-width: 900px)'
 
-const PAGE_TITLES: Record<string, string> = {
-  '/': 'Rex Groups | Technology. Business. Innovation.',
-  '/marketplace': 'Marketplace | Rex Groups',
-}
-
 function getInitialTheme(): Theme {
   try {
     const saved = localStorage.getItem('rex-theme')
@@ -53,45 +48,9 @@ function useIsMobile() {
   return isMobile
 }
 
-// Scrolls to #hash targets (even from another page) or to the top.
-function ScrollManager() {
-  const { pathname, hash, key } = useLocation()
-
-  useEffect(() => {
-    if (!hash) {
-      // Jump to the top without the page-wide smooth scrolling.
-      const root = document.documentElement
-      root.style.scrollBehavior = 'auto'
-      window.scrollTo(0, 0)
-      root.style.scrollBehavior = ''
-      return
-    }
-
-    const id = decodeURIComponent(hash.slice(1))
-    let attempts = 0
-    let timer = 0
-
-    // The target may not be rendered yet right after a page change.
-    const tryScroll = () => {
-      const target = document.getElementById(id)
-
-      if (target) {
-        target.scrollIntoView()
-        return
-      }
-
-      if (attempts++ < 20) {
-        timer = window.setTimeout(tryScroll, 50)
-      }
-    }
-
-    tryScroll()
-
-    return () => window.clearTimeout(timer)
-  }, [pathname, hash, key])
-
-  return null
-}
+// The splash screen only plays on the first visit, not every time the
+// visitor comes back from the marketplace (which sits outside this layout).
+let loaderAlreadyShown = false
 
 export default function SiteLayout() {
   const { pathname } = useLocation()
@@ -99,24 +58,21 @@ export default function SiteLayout() {
 
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(!loaderAlreadyShown)
 
   const closeMenu = () => setMenuOpen(false)
 
   // Loading screen (shown once when the site first opens)
   useEffect(() => {
+    if (!isLoading) return
+
     const timer = window.setTimeout(() => {
+      loaderAlreadyShown = true
       setIsLoading(false)
     }, 1600)
 
     return () => window.clearTimeout(timer)
-  }, [])
-
-  // Per-page document title
-  useEffect(() => {
-    document.title =
-      PAGE_TITLES[pathname] ?? 'Page not found | Rex Groups'
-  }, [pathname])
+  }, [isLoading])
 
   // Close the mobile menu whenever the page changes
   useEffect(() => {
@@ -171,8 +127,6 @@ export default function SiteLayout() {
 
   return (
     <div className={`app ${theme}`}>
-      <ScrollManager />
-
       {/* PREMIUM REX GROUPS LOADING SCREEN */}
       {isLoading && (
         <div
