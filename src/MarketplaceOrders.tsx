@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -34,6 +35,7 @@ type OrderPackage = {
   trackingNumber: string
   shippingCarrier: string
   paidAt: Seconds
+  processingAt: Seconds
   shippedAt: Seconds
   deliveredAt: Seconds
 }
@@ -83,7 +85,6 @@ const STEPS = [
   'Delivered',
 ]
 
-// How many steps are complete for each seller-order status.
 const PROGRESS: Record<string, number> = {
   'Awaiting Payment': 1,
   'Awaiting Fulfilment': 2,
@@ -98,15 +99,12 @@ function formatDate(value: Seconds) {
     : 'Date unavailable'
 }
 
-// Date shown under a tracker step, or nothing when it is not known yet.
 function stepDate(value: Seconds) {
   return value?.seconds
     ? new Date(value.seconds * 1000).toLocaleDateString()
     : ''
 }
 
-// A failed or non-JSON response (for example a missing API route) must not
-// throw, so the orders list keeps working even if enquiries fail to load.
 async function readJson(response: Response) {
   try {
     return (await response.json()) as Record<string, unknown>
@@ -179,7 +177,6 @@ export default function MarketplaceOrders() {
           : [],
       )
 
-      // Enquiries are secondary: a failure here should not hide orders.
       setEnquiries(
         enquiryResponse.ok && Array.isArray(enquiryData.enquiries)
           ? (enquiryData.enquiries as BuyerEnquiry[])
@@ -304,180 +301,230 @@ export default function MarketplaceOrders() {
             </div>
           ) : (
             <div className="rex-orders-list">
-              {orders.map((order) => (
-                <article className="rex-order" key={order.id}>
-                  <div className="rex-order-top">
-                    <div>
-                      <span className="rex-market-eyebrow">ORDER REFERENCE</span>
-                      <h3>{order.id}</h3>
-                      <small>Placed {formatDate(order.createdAt)}</small>
-                    </div>
+              {orders.map((order) => {
+                const deliveryFee = order.deliveryFee
+                const total = order.subtotal +
+                  (typeof deliveryFee === 'number' ? deliveryFee : 0)
 
-                    <strong>{money.format(order.subtotal)}</strong>
-                  </div>
-
-                  <div className="rex-order-badges">
-                    <span className="rex-package-status">
-                      {order.status || 'Awaiting Payment'}
-                    </span>
-                    <span
-                      className={`rex-pay-badge ${paymentClass(order.paymentStatus)}`}
-                    >
-                      Payment: {order.paymentStatus || 'Unpaid'}
-                    </span>
-                  </div>
-
-                  {order.shippingAddress && (
-                    <div className="rex-delivery">
-                      <MapPin size={16} />
+                return (
+                  <article className="rex-order" key={order.id}>
+                    <div className="rex-order-top">
                       <div>
-                        <strong>Delivering to</strong>
-                        <p>
-                          {[
-                            order.shippingAddress.fullName,
-                            order.shippingAddress.streetAddress,
-                            order.shippingAddress.city,
-                            order.shippingAddress.state,
-                            order.shippingAddress.postalCode,
-                            order.shippingAddress.country,
-                          ]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </p>
-                        {order.shippingAddress.phone && (
-                          <small>Phone: {order.shippingAddress.phone}</small>
-                        )}
+                        <span className="rex-market-eyebrow">ORDER REFERENCE</span>
+                        <h3>{order.id}</h3>
+                        <small>Placed {formatDate(order.createdAt)}</small>
+                      </div>
+
+                      <strong>{money.format(total)}</strong>
+                    </div>
+
+                    <div className="rex-order-badges">
+                      <span className="rex-package-status">
+                        {order.status || 'Awaiting Payment'}
+                      </span>
+                      <span
+                        className={`rex-pay-badge ${paymentClass(order.paymentStatus)}`}
+                      >
+                        Payment: {order.paymentStatus || 'Unpaid'}
+                      </span>
+                    </div>
+
+                    <div className="rex-order-total">
+                      <div>
+                        <span>Products subtotal</span>
+                        <strong>{money.format(order.subtotal)}</strong>
+                      </div>
+
+                      <div>
+                        <span>Delivery fee</span>
+                        <strong>
+                          {typeof deliveryFee === 'number'
+                            ? money.format(deliveryFee)
+                            : 'Not yet calculated'}
+                        </strong>
+                      </div>
+
+                      <div className="rex-order-grand-total">
+                        <span>Order total</span>
+                        <strong>{money.format(total)}</strong>
                       </div>
                     </div>
-                  )}
 
-                  {order.packages.length === 0 && (
-                    <p className="rex-order-note">
-                      Your order is being prepared. Check back shortly.
-                    </p>
-                  )}
-
-                  {order.packages.map((pack) => {
-                    const done = PROGRESS[pack.status] ?? 1
-
-                    // Matches STEPS: placed, paid, processing, shipped, delivered.
-                    const stepDates = [
-                      stepDate(order.createdAt),
-                      stepDate(pack.paidAt),
-                      '',
-                      stepDate(pack.shippedAt),
-                      stepDate(pack.deliveredAt),
-                    ]
-
-                    return (
-                      <div className="rex-package" key={pack.id}>
-                        <div className="rex-package-head">
-                          <strong>{pack.storeName}</strong>
-                          <span className="rex-package-status">
-                            {pack.status}
-                          </span>
+                    {order.shippingAddress && (
+                      <div className="rex-delivery">
+                        <MapPin size={16} />
+                        <div>
+                          <strong>Delivering to</strong>
+                          <p>
+                            {[
+                              order.shippingAddress.fullName,
+                              order.shippingAddress.streetAddress,
+                              order.shippingAddress.city,
+                              order.shippingAddress.state,
+                              order.shippingAddress.postalCode,
+                              order.shippingAddress.country,
+                            ]
+                              .filter(Boolean)
+                              .join(', ')}
+                          </p>
+                          {order.shippingAddress.phone && (
+                            <small>Phone: {order.shippingAddress.phone}</small>
+                          )}
                         </div>
-
-                        <p className="rex-package-pay">
-                          <span
-                            className={`rex-pay-badge ${paymentClass(pack.paymentStatus)}`}
-                          >
-                            {pack.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid'}
-                          </span>
-                          {pack.paidAt?.seconds ? (
-                            <small>Confirmed {formatDate(pack.paidAt)}</small>
-                          ) : null}
-                          <b>{money.format(pack.subtotal)}</b>
-                        </p>
-
-                        <ul className="rex-package-items">
-                          {pack.items.map((item, index) => (
-                            <li key={`${item.productId}-${index}`}>
-                              {item.imageUrl ? (
-                                <img src={item.imageUrl} alt="" />
-                              ) : (
-                                <ShoppingBag size={18} />
-                              )}
-                              <span>
-                                {item.name} × {item.quantity}
-                              </span>
-                              <b>
-                                {money.format(
-                                  (item.unitPrice ?? item.price ?? 0) *
-                                    item.quantity,
-                                )}
-                              </b>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <ol className="rex-tracker" aria-label="Order progress">
-                          {STEPS.map((step, index) => (
-                            <li
-                              key={step}
-                              className={
-                                index < done
-                                  ? index === done - 1
-                                    ? 'done current'
-                                    : 'done'
-                                  : ''
-                              }
-                            >
-                              <i>
-                                {index < done ? (
-                                  <CheckCircle2 size={16} />
-                                ) : (
-                                  index + 1
-                                )}
-                              </i>
-                              <span>{step}</span>
-                              {index < done && stepDates[index] && (
-                                <small>{stepDates[index]}</small>
-                              )}
-                            </li>
-                          ))}
-                        </ol>
-
-                        {pack.paymentStatus !== 'Paid' && (
-                          <p className="rex-order-note">
-                            Waiting for the seller to confirm your payment.
-                            Contact the store if you have already paid.
-                          </p>
-                        )}
-
-                        {pack.trackingNumber && (
-                          <p className="rex-tracking">
-                            <Truck size={16} />
-                            Tracking number: <strong>{pack.trackingNumber}</strong>
-                            {pack.shippingCarrier && (
-                              <> · Carrier: <strong>{pack.shippingCarrier}</strong></>
-                            )}
-                          </p>
-                        )}
-
-                        {pack.shippedAt?.seconds && !pack.deliveredAt?.seconds ? (
-                          <p className="rex-order-note">
-                            Shipped {formatDate(pack.shippedAt)}
-                          </p>
-                        ) : null}
-
-                        {pack.deliveredAt?.seconds ? (
-                          <p className="rex-order-note">
-                            Delivered {formatDate(pack.deliveredAt)}
-                          </p>
-                        ) : null}
-
-                        <Link
-                          className="rex-order-contact"
-                          to={`/marketplace/store/${pack.sellerId}`}
-                        >
-                          Ask {pack.storeName} a question
-                        </Link>
                       </div>
-                    )
-                  })}
-                </article>
-              ))}
+                    )}
+
+                    {order.packages.length === 0 && (
+                      <p className="rex-order-note">
+                        Your order is being prepared. Check back shortly.
+                      </p>
+                    )}
+
+                    {order.packages.map((pack) => {
+                      const done = PROGRESS[pack.status] ?? 1
+
+                      const stepDates = [
+                        stepDate(order.createdAt),
+                        stepDate(pack.paidAt),
+                        stepDate(pack.processingAt),
+                        stepDate(pack.shippedAt),
+                        stepDate(pack.deliveredAt),
+                      ]
+
+                      return (
+                        <div className="rex-package" key={pack.id}>
+                          <div className="rex-package-head">
+                            <strong>{pack.storeName}</strong>
+                            <span className="rex-package-status">
+                              {pack.status}
+                            </span>
+                          </div>
+
+                          <p className="rex-package-pay">
+                            <span
+                              className={`rex-pay-badge ${paymentClass(pack.paymentStatus)}`}
+                            >
+                              {pack.paymentStatus === 'Paid'
+                                ? 'Paid'
+                                : pack.paymentStatus || 'Unpaid'}
+                            </span>
+
+                            {pack.paidAt?.seconds ? (
+                              <small>Confirmed {formatDate(pack.paidAt)}</small>
+                            ) : null}
+
+                            <b>{money.format(pack.subtotal)}</b>
+                          </p>
+
+                          <ul className="rex-package-items">
+                            {pack.items.map((item, index) => (
+                              <li key={`${item.productId}-${index}`}>
+                                {item.imageUrl ? (
+                                  <img src={item.imageUrl} alt="" />
+                                ) : (
+                                  <ShoppingBag size={18} />
+                                )}
+
+                                <span>
+                                  {item.name} × {item.quantity}
+                                </span>
+
+                                <b>
+                                  {money.format(
+                                    (item.unitPrice ?? item.price ?? 0) *
+                                      item.quantity,
+                                  )}
+                                </b>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <ol className="rex-tracker" aria-label="Order progress">
+                            {STEPS.map((step, index) => (
+                              <li
+                                key={step}
+                                className={
+                                  index < done
+                                    ? index === done - 1
+                                      ? 'done current'
+                                      : 'done'
+                                    : ''
+                                }
+                              >
+                                <i>
+                                  {index < done ? (
+                                    <CheckCircle2 size={16} />
+                                  ) : (
+                                    index + 1
+                                  )}
+                                </i>
+
+                                <span>{step}</span>
+
+                                {index < done && stepDates[index] && (
+                                  <small>{stepDates[index]}</small>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+
+                          {pack.paymentStatus !== 'Paid' && (
+                            <p className="rex-order-note">
+                              Waiting for secure payment confirmation. Your
+                              order will move to fulfilment once payment is
+                              verified. If you have completed payment, refresh
+                              this page shortly.
+                            </p>
+                          )}
+
+                          {pack.paymentStatus === 'Paid' &&
+                            pack.status === 'Awaiting Fulfilment' && (
+                              <p className="rex-order-note">
+                                Payment confirmed. Your order is waiting for
+                                the store to begin processing.
+                              </p>
+                            )}
+
+                          {pack.trackingNumber && (
+                            <p className="rex-tracking">
+                              <Truck size={16} />
+                              Tracking number:{' '}
+                              <strong>{pack.trackingNumber}</strong>
+
+                              {pack.shippingCarrier && (
+                                <>
+                                  {' '}· Carrier:{' '}
+                                  <strong>{pack.shippingCarrier}</strong>
+                                </>
+                              )}
+                            </p>
+                          )}
+
+                          {pack.shippedAt?.seconds &&
+                            !pack.deliveredAt?.seconds && (
+                              <p className="rex-order-note">
+                                Shipped {formatDate(pack.shippedAt)}
+                              </p>
+                            )}
+
+                          {pack.deliveredAt?.seconds && (
+                            <p className="rex-order-note">
+                              Delivered {formatDate(pack.deliveredAt)}
+                            </p>
+                          )}
+
+                          <Link
+                            className="rex-order-contact"
+                            to={`/marketplace/store/${pack.sellerId}`}
+                          >
+                            Ask {pack.storeName} a question
+                          </Link>
+                        </div>
+                      )
+                    })}
+                  </article>
+                )
+              })}
             </div>
           )
         ) : enquiries.length === 0 ? (
@@ -514,7 +561,9 @@ export default function MarketplaceOrders() {
                     <small>{formatDate(item.repliedAt)}</small>
                   </div>
                 ) : (
-                  <p className="rex-order-note">Waiting for the seller to reply.</p>
+                  <p className="rex-order-note">
+                    Waiting for the seller to reply.
+                  </p>
                 )}
               </article>
             ))}
