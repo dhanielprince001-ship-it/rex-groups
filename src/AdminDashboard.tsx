@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   collection,
   deleteDoc,
@@ -628,7 +629,7 @@ export default function AdminDashboard() {
           <ShieldCheck size={34} />
           <h2>Administrator access</h2>
           <p>Please sign in with your administrator account to continue.</p>
-          <a href="#account" className="admin-button">Go to sign in</a>
+          <Link to="/#account" className="admin-button">Go to sign in</Link>
         </div>
       </section>
     )
