@@ -1,12 +1,18 @@
 
 import { v2 as cloudinary } from 'cloudinary'
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import {
+  initializeApp,
+  getApps,
+  cert
+} from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 function getFirebaseAdmin() {
-  if (getApps().length) return getApps()[0]
+  if (getApps().length) {
+    return getApps()[0]
+  }
 
   const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT
 
@@ -48,7 +54,7 @@ export default async function handler(
     const decodedToken = await getAuth(app).verifyIdToken(idToken)
     const uid = decodedToken.uid
 
-    // Existing requests default to product uploads.
+    // Existing product requests default to product uploads.
     const purpose = req.body?.purpose || 'product'
 
     if (purpose !== 'product' && purpose !== 'store') {
@@ -66,6 +72,7 @@ export default async function handler(
       ? storeSnapshot.data()
       : null
 
+    // Product images require an approved store.
     if (purpose === 'product') {
       if (
         !store ||
@@ -78,6 +85,8 @@ export default async function handler(
       }
     }
 
+    // Store images are allowed before application,
+    // while pending, and while approved.
     if (purpose === 'store' && store) {
       if (
         store.ownerId !== uid ||
@@ -133,6 +142,7 @@ export default async function handler(
       apiKey,
       uploadPreset: 'rexgroups_products'
     })
+
   } catch (error) {
     console.error('Cloudinary signing error:', error)
 
