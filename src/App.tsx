@@ -80,7 +80,6 @@ function RouteEffects() {
   return null
 }
 
-// The floating tracking button appears only on marketplace pages.
 function MarketplaceRoute({
   children,
 }: {
@@ -161,90 +160,80 @@ function MarketplacePlaceholder({
 
 export default function App() {
   return (
-    <CartProvider>
-      <RouteEffects />
-        <ThemeProvider>
+    <ThemeProvider>
+      <CartProvider>
+        <RouteEffects />
 
-      <Routes>
-        {/* CORPORATE WEBSITE - NO FLOATING TRACKING BUTTON */}
-        <Route element={<SiteLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
+        <Routes>
+          <Route element={<SiteLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
 
-        {/* MARKETPLACE HOME */}
-        <Route
-          path="/marketplace"
-          element={
-            <MarketplaceRoute>
-              <MarketplaceHome />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace"
+            element={
+              <MarketplaceRoute>
+                <MarketplaceHome />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* SHOPPING CART */}
-        <Route
-          path="/marketplace/cart"
-          element={
-            <MarketplaceRoute>
-              <MarketplaceCart />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace/cart"
+            element={
+              <MarketplaceRoute>
+                <MarketplaceCart />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* CHECKOUT */}
-        <Route
-          path="/marketplace/checkout"
-          element={
-            <MarketplaceRoute>
-              <MarketplaceCheckout />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace/checkout"
+            element={
+              <MarketplaceRoute>
+                <MarketplaceCheckout />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* BUYER ORDER TRACKING */}
-        <Route
-          path="/marketplace/orders"
-          element={
-            <MarketplaceRoute>
-              <MarketplaceOrders />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace/orders"
+            element={
+              <MarketplaceRoute>
+                <MarketplaceOrders />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* SELLER DASHBOARD */}
-        <Route
-          path="/marketplace/seller"
-          element={
-            <MarketplaceRoute>
-              <MarketplacePage />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace/seller"
+            element={
+              <MarketplaceRoute>
+                <MarketplacePage />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* PUBLIC STORE */}
-        <Route
-          path="/marketplace/store/:storeId"
-          element={
-            <MarketplaceRoute>
-              <MarketplaceStore />
-            </MarketplaceRoute>
-          }
-        />
+          <Route
+            path="/marketplace/store/:storeId"
+            element={
+              <MarketplaceRoute>
+                <MarketplaceStore />
+              </MarketplaceRoute>
+            }
+          />
 
-        {/* PRODUCT PAGE */}
-        <Route
-          path="/marketplace/product/:productId"
-          element={
-            <MarketplaceRoute>
-              <MarketplacePlaceholder title="Product page coming next." />
-            </MarketplaceRoute>
-          }
-        />
-         </Routes>
+          <Route
+            path="/marketplace/product/:productId"
+            element={
+              <MarketplaceRoute>
+                <MarketplacePlaceholder title="Product page coming next." />
+              </MarketplaceRoute>
+            }
+          />
+        </Routes>
       </CartProvider>
     </ThemeProvider>
-  )
-}
   )
 }
