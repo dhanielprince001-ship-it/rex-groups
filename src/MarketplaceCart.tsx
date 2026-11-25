@@ -127,15 +127,14 @@ export default function MarketplaceCart() {
                 <strong>{money.format(subtotal)}</strong>
               </div>
 
-              <button
+              <Link
                 className="rex-cart-checkout"
-                type="button"
-                disabled
+                to="/marketplace/checkout"
               >
-                Checkout coming soon
-              </button>
+                Proceed to checkout
+              </Link>
 
-              <p>Payment and delivery options will be added in the next stage.</p>
+              <p>Delivery charges will be confirmed separately.</p>
             </aside>
           </div>
         )}
