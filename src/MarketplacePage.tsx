@@ -1,39 +1,38 @@
-import { useEffect, useState } from 'react'
+
 import { Link } from 'react-router-dom'
+import { Sun, Moon } from 'lucide-react'
 
 import Marketplace from './Marketplace'
-
-type Theme = 'dark' | 'light'
-
-// The seller dashboard renders outside SiteLayout, so it must apply the
-// theme itself: the colour variables (--text, --surface, --line...) are
-// only defined on the `.app` wrapper.
-function getStoredTheme(): Theme {
-  try {
-    const saved = localStorage.getItem('rex-theme')
-
-    if (saved === 'dark' || saved === 'light') return saved
-  } catch {
-    // Storage unavailable
-  }
-
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches
-    ? 'light'
-    : 'dark'
-}
+import { useTheme } from './ThemeContext'
 
 export default function MarketplacePage() {
-  const [theme] = useState<Theme>(getStoredTheme)
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-  }, [theme])
+  const { theme, toggleTheme } = useTheme()
 
   return (
     <div className={`app ${theme} marketplace-page`}>
       <header className="marketplace-page-bar">
-        <Link to="/marketplace">← Back to marketplace</Link>
-        <Link to="/">Rex Groups</Link>
+        <Link to="/marketplace">
+          ← Back to marketplace
+        </Link>
+
+        <div className="marketplace-page-actions">
+          <button
+            type="button"
+            className="rex-market-theme-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {theme === 'dark' ? (
+              <Sun size={19} />
+            ) : (
+              <Moon size={19} />
+            )}
+          </button>
+
+          <Link to="/">
+            Rex Groups
+          </Link>
+        </div>
       </header>
 
       <Marketplace />
