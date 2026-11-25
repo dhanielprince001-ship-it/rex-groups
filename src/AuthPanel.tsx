@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 
+import { Link } from 'react-router-dom'
+
 import {
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -231,9 +233,9 @@ export function AuthButton({
 
   return (
     <div className="auth-panel">
-      <a href="#account" onClick={onOpen}>
+      <Link to="/#account" onClick={onOpen}>
         {user ? 'My account' : 'Sign in / Register'}
-      </a>
+      </Link>
     </div>
   )
 }
@@ -382,7 +384,7 @@ function CustomerEnquiryHistory({ user }: { user: User }) {
 // CUSTOMER ACCOUNT CENTRE
 
 function AccountCenter({ user }: { user: User }) {
-  const { setNotice, signOutUser } = useAuth()
+  const { setNotice, signOutUser, refresh } = useAuth()
 
   const [name, setName] = useState(user.displayName ?? '')
   const [phone, setPhone] = useState('')
@@ -454,6 +456,9 @@ function AccountCenter({ user }: { user: User }) {
       await updateProfile(user, {
         displayName: name.trim(),
       })
+
+      // The user object is mutated in place, so ask the provider to re-render.
+      refresh()
 
       await setDoc(
         profileRef,
