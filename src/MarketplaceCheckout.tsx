@@ -1,4 +1,3 @@
-
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -34,6 +33,8 @@ export default function MarketplaceCheckout() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [orderId, setOrderId] = useState('')
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
 
   useEffect(() => {
     if (user) {
@@ -106,6 +107,55 @@ export default function MarketplaceCheckout() {
     }
   }
 
+  async function handlePayNow() {
+    if (!user || !orderId) return
+
+    setPaymentLoading(true)
+    setPaymentError('')
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/payments-initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ orderId }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'Payment could not be started.',
+        )
+      }
+
+      if (
+        typeof data.authorizationUrl !== 'string' ||
+        !data.authorizationUrl.startsWith(
+          'https://checkout.paystack.com/',
+        )
+      ) {
+        throw new Error(
+          'The payment provider returned an invalid checkout link.',
+        )
+      }
+
+      window.location.assign(data.authorizationUrl)
+    } catch (err) {
+      setPaymentError(
+        err instanceof Error
+          ? err.message
+          : 'Payment could not be started.',
+      )
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
   if (!ready) {
     return (
       <main className="rex-marketplace rex-checkout-page">
@@ -165,12 +215,35 @@ export default function MarketplaceCheckout() {
             Current status: <strong>Awaiting Payment</strong>
           </p>
           <p>
-            Payment has not been collected yet. We'll connect payment
-            processing in the next stage.
+            Your order is saved. Online payment is currently being prepared
+            and will become available once the administrator configures
+            Paystack.
           </p>
-          <Link className="rex-market-primary-link" to="/marketplace/orders">
+
+          {paymentError && (
+            <div className="marketplace-error" role="alert">
+              {paymentError}
+            </div>
+          )}
+
+          <button
+            className="rex-market-primary-link"
+            type="button"
+            onClick={() => void handlePayNow()}
+            disabled={paymentLoading}
+          >
+            {paymentLoading
+              ? 'Connecting to payment...'
+              : 'Pay securely with Paystack'}
+          </button>
+
+          <Link
+            className="rex-market-primary-link"
+            to="/marketplace/orders"
+          >
             Track my order
           </Link>
+
           <Link className="rex-market-text-link" to="/marketplace">
             Continue shopping
           </Link>
@@ -306,7 +379,9 @@ export default function MarketplaceCheckout() {
               required
             />
 
-            <label htmlFor="checkout-postal">Postal code (optional)</label>
+            <label htmlFor="checkout-postal">
+              Postal code (optional)
+            </label>
             <input
               id="checkout-postal"
               value={postalCode}
@@ -321,7 +396,10 @@ export default function MarketplaceCheckout() {
             >
               {loading ? (
                 <>
-                  <Loader2 className="marketplace-spinner" size={18} />
+                  <Loader2
+                    className="marketplace-spinner"
+                    size={18}
+                  />
                   Creating order...
                 </>
               ) : (
@@ -343,7 +421,9 @@ export default function MarketplaceCheckout() {
               <div className="rex-checkout-item" key={item.id}>
                 <div>
                   <strong>{item.name}</strong>
-                  <span>{item.storeName} · Qty {item.quantity}</span>
+                  <span>
+                    {item.storeName} · Qty {item.quantity}
+                  </span>
                 </div>
                 <strong>
                   {money.format(item.price * item.quantity)}
@@ -358,7 +438,8 @@ export default function MarketplaceCheckout() {
 
             <p>
               Delivery charges will be confirmed separately. No payment
-              is collected in this checkout stage.
+              is collected in this checkout stage until Paystack is
+              configured.
             </p>
           </aside>
         </div>
