@@ -5599,3 +5599,509 @@ h2 em {
     flex-direction: column;
   }
 }
+
+
+/* =====================================
+   SELLER: SALES & ENQUIRIES
+===================================== */
+
+.seller-insights {
+  margin-bottom: 40px;
+}
+
+.seller-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.seller-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seller-tab.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accentText);
+}
+
+.seller-tab-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
+}
+
+.seller-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.seller-stats > div {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.seller-stats span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.seller-stats strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+}
+
+.seller-sold-list,
+.seller-enquiry-list {
+  display: grid;
+  gap: 12px;
+}
+
+.seller-sold-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.seller-sold-row > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.seller-sold-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.seller-sold-row img,
+.seller-sold-placeholder {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.seller-sold-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--surface2);
+  color: var(--muted);
+}
+
+.seller-enquiries-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.seller-enquiry {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.seller-enquiry-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.seller-enquiry-top small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.seller-enquiry-status {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.seller-enquiry-status.new {
+  background: rgba(229, 72, 77, 0.15);
+  color: #e5484d;
+}
+
+.seller-enquiry-status.replied {
+  background: rgba(95, 159, 110, 0.18);
+  color: #5f9f6e;
+}
+
+.seller-enquiry-product {
+  margin: 10px 0 0;
+  color: var(--accentInk);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.seller-enquiry-message {
+  margin: 10px 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.seller-enquiry-reply {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accentInk);
+  border-radius: 8px;
+  background: var(--surface2);
+}
+
+.seller-enquiry-reply p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.seller-enquiry-reply small {
+  color: var(--muted);
+}
+
+.seller-enquiry-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.seller-enquiry-actions textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  resize: vertical;
+}
+
+.seller-enquiry-actions > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.seller-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .seller-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .seller-tabs {
+    flex-wrap: wrap;
+  }
+}
+
+
+/* =====================================
+   BUYER: MY ORDERS, TRACKING, ASK SELLER
+===================================== */
+
+.rex-orders-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--rm-line);
+  border-radius: 999px;
+  background: var(--rm-paper);
+  color: var(--rm-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rex-orders-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 24px;
+}
+
+.rex-orders-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--rm-line);
+  border-radius: 999px;
+  background: var(--rm-paper);
+  color: var(--rm-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rex-orders-tabs button.active {
+  border-color: var(--rm-ink);
+  background: var(--rm-ink);
+  color: #fff;
+}
+
+.rex-orders-list {
+  display: grid;
+  gap: 18px;
+}
+
+.rex-order {
+  padding: 22px;
+  border: 1px solid var(--rm-line);
+  border-radius: 16px;
+  background: var(--rm-paper);
+}
+
+.rex-order-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rex-order-top h3 {
+  margin: 6px 0 4px;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.rex-order-top small {
+  color: var(--rm-muted);
+}
+
+.rex-order-note {
+  margin: 12px 0 0;
+  color: var(--rm-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.rex-package {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rm-line);
+}
+
+.rex-package-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rex-package-status {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--rm-bg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rex-package-items {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rex-package-items li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rex-package-items li span {
+  flex: 1;
+  min-width: 0;
+}
+
+.rex-package-items img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.rex-tracker {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 18px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.rex-tracker li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--rm-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.rex-tracker i {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--rm-line);
+  border-radius: 50%;
+  background: var(--rm-paper);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.rex-tracker li.done {
+  color: var(--rm-ink);
+}
+
+.rex-tracker li.done i {
+  border-color: var(--rm-accent);
+  background: var(--rm-accent);
+  color: #171b19;
+}
+
+.rex-tracker li.current span {
+  font-weight: 700;
+}
+
+.rex-tracking {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--rm-bg);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.rex-order-contact {
+  display: inline-block;
+  margin-top: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.rex-enquiry-message {
+  margin: 14px 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.rex-enquiry-reply {
+  padding: 14px 16px;
+  border-left: 3px solid var(--rm-accent);
+  border-radius: 10px;
+  background: var(--rm-bg);
+}
+
+.rex-enquiry-reply p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+
+.rex-enquiry-reply small {
+  color: var(--rm-muted);
+}
+
+.rex-ask-form {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.rex-ask-form label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rex-ask-form select,
+.rex-ask-form textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--rm-line);
+  border-radius: 10px;
+  background: var(--rm-paper);
+  color: var(--rm-ink);
+  font: inherit;
+}
+
+.rex-ask-form button {
+  justify-self: start;
+  border: 0;
+  cursor: pointer;
+}
+
+.rex-ask-error {
+  margin: 0;
+  color: #c0392b;
+  font-size: 14px;
+}
+
+.rex-ask-success {
+  margin: 0;
+  color: #2e7d46;
+  font-size: 14px;
+}
+
+@media (max-width: 700px) {
+  .rex-tracker {
+    grid-template-columns: 1fr;
+  }
+
+  .rex-tracker li {
+    flex-direction: row;
+    text-align: left;
+  }
+
+  .rex-order-top {
+    flex-direction: column;
+  }
+}
