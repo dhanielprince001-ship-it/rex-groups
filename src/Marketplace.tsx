@@ -82,12 +82,7 @@ const categories = [
   'Other',
 ]
 
-const initialProductForm = {
-  name: '',
-  description: '',
-  price: '',
-  category: 'Fashion',
-}
+
 
 async function uploadProductImage(
   file: File,
