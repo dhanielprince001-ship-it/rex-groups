@@ -262,7 +262,10 @@ export default async function handler(
       if (!group) {
         group = {
           sellerId,
-          storeName: store.name,
+          storeName:
+            typeof store.name === 'string' && store.name.trim()
+              ? store.name
+              : 'Store',
           items: [],
           subtotalKobo: 0,
         }
