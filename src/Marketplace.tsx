@@ -31,12 +31,23 @@ import {
   ImagePlus,
 } from 'lucide-react'
 
+type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
+
 type StoreData = {
   ownerId: string
   name: string
   description: string
   category: string
-  status: 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
+  status: StoreStatus
+  logoUrl?: string
+  logoPublicId?: string
+  coverUrl?: string
+  coverPublicId?: string
+  phone?: string
+  whatsapp?: string
+  email?: string
+  location?: string
+  socialLink?: string
 }
 
 type ProductStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
@@ -55,6 +66,8 @@ type ProductData = {
   createdAt?: { seconds?: number }
 }
 
+type UploadPurpose = 'product' | 'store'
+
 type UploadSignature = {
   timestamp: number
   signature: string
@@ -62,6 +75,7 @@ type UploadSignature = {
   cloudName: string
   apiKey: string
   uploadPreset: string
+  error?: string
 }
 
 type CloudinaryResult = {
@@ -82,21 +96,40 @@ const categories = [
   'Other',
 ]
 
+const allowedImageTypes = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]
 
+function validateImage(file: File): string | null {
+  if (!allowedImageTypes.includes(file.type)) {
+    return 'Choose a JPG, PNG or WEBP image.'
+  }
 
-async function uploadProductImage(
+  if (file.size > 5 * 1024 * 1024) {
+    return 'Image must be 5MB or smaller.'
+  }
+
+  return null
+}
+
+async function uploadImage(
   file: File,
-  idToken: string
+  idToken: string,
+  purpose: UploadPurpose = 'product'
 ): Promise<CloudinaryResult> {
   const signatureResponse = await fetch('/api/cloudinary-signature', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${idToken}`,
+      'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ purpose }),
   })
 
   const signatureData =
-    await signatureResponse.json() as UploadSignature & { error?: string }
+    await signatureResponse.json() as UploadSignature
 
   if (!signatureResponse.ok) {
     throw new Error(
@@ -122,7 +155,9 @@ async function uploadProductImage(
   )
 
   const uploadData =
-    await uploadResponse.json() as CloudinaryResult & { error?: { message?: string } }
+    await uploadResponse.json() as CloudinaryResult & {
+      error?: { message?: string }
+    }
 
   if (!uploadResponse.ok) {
     throw new Error(
@@ -145,6 +180,15 @@ export default function Marketplace() {
   const [storeDescription, setStoreDescription] = useState('')
   const [storeCategory, setStoreCategory] = useState('Fashion')
 
+  const [storePhone, setStorePhone] = useState('')
+  const [storeWhatsapp, setStoreWhatsapp] = useState('')
+  const [storeEmail, setStoreEmail] = useState('')
+  const [storeLocation, setStoreLocation] = useState('')
+  const [storeSocialLink, setStoreSocialLink] = useState('')
+
+  const [storeLogo, setStoreLogo] = useState<File | null>(null)
+  const [storeCover, setStoreCover] = useState<File | null>(null)
+
   const [savingStore, setSavingStore] = useState(false)
 
   // PRODUCT STATE
@@ -165,6 +209,10 @@ export default function Marketplace() {
   // MESSAGES
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+
+  const storeLocked =
+    store?.status === 'Rejected' ||
+    store?.status === 'Suspended'
 
   // LOAD STORE
   useEffect(() => {
@@ -190,8 +238,15 @@ export default function Marketplace() {
           setStoreName(data.name || '')
           setStoreDescription(data.description || '')
           setStoreCategory(data.category || 'Other')
+
+          setStorePhone(data.phone || '')
+          setStoreWhatsapp(data.whatsapp || '')
+          setStoreEmail(data.email || user.email || '')
+          setStoreLocation(data.location || '')
+          setStoreSocialLink(data.socialLink || '')
         } else {
           setStore(null)
+          setStoreEmail(user.email || '')
         }
 
         setLoadingStore(false)
@@ -270,6 +325,11 @@ export default function Marketplace() {
       return
     }
 
+    if (storeLocked) {
+      setError('This store cannot currently be edited.')
+      return
+    }
+
     if (storeName.trim().length < 3) {
       setError('Store name must contain at least 3 characters.')
       return
@@ -280,12 +340,58 @@ export default function Marketplace() {
       return
     }
 
-    if (
-      store?.status === 'Rejected' ||
-      store?.status === 'Suspended'
-    ) {
-      setError('This store cannot currently be edited.')
+    if (!storePhone.trim()) {
+      setError('Please enter your business phone number.')
       return
+    }
+
+    if (!storeWhatsapp.trim()) {
+      setError('Please enter your WhatsApp number.')
+      return
+    }
+
+    if (!storeEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(storeEmail)) {
+      setError('Please enter a valid business email.')
+      return
+    }
+
+    if (!storeLocation.trim()) {
+      setError('Please enter your business location.')
+      return
+    }
+
+    if (
+      !storeSocialLink.trim() ||
+      !/^https?:\/\/.+/i.test(storeSocialLink.trim())
+    ) {
+      setError('Enter a valid social media link beginning with https://')
+      return
+    }
+
+    if (!store?.logoUrl && !storeLogo) {
+      setError('Please upload your store logo.')
+      return
+    }
+
+    if (!store?.coverUrl && !storeCover) {
+      setError('Please upload your store cover image.')
+      return
+    }
+
+    if (storeLogo) {
+      const imageError = validateImage(storeLogo)
+      if (imageError) {
+        setError(`Store logo: ${imageError}`)
+        return
+      }
+    }
+
+    if (storeCover) {
+      const imageError = validateImage(storeCover)
+      if (imageError) {
+        setError(`Store cover: ${imageError}`)
+        return
+      }
     }
 
     setSavingStore(true)
@@ -293,34 +399,79 @@ export default function Marketplace() {
     setMessage('')
 
     try {
+      const token = await user.getIdToken()
+
+      let logoUrl = store?.logoUrl || ''
+      let logoPublicId = store?.logoPublicId || ''
+      let coverUrl = store?.coverUrl || ''
+      let coverPublicId = store?.coverPublicId || ''
+
+      if (storeLogo) {
+        const uploadedLogo = await uploadImage(
+          storeLogo,
+          token,
+          'store'
+        )
+
+        logoUrl = uploadedLogo.secure_url
+        logoPublicId = uploadedLogo.public_id
+      }
+
+      if (storeCover) {
+        const uploadedCover = await uploadImage(
+          storeCover,
+          token,
+          'store'
+        )
+
+        coverUrl = uploadedCover.secure_url
+        coverPublicId = uploadedCover.public_id
+      }
+
+      const storeData = {
+        ownerId: user.uid,
+        ownerName: user.displayName || user.email || 'Store Owner',
+        name: storeName.trim(),
+        description: storeDescription.trim(),
+        category: storeCategory,
+        logoUrl,
+        logoPublicId,
+        coverUrl,
+        coverPublicId,
+        phone: storePhone.trim(),
+        whatsapp: storeWhatsapp.trim(),
+        email: storeEmail.trim(),
+        location: storeLocation.trim(),
+        socialLink: storeSocialLink.trim(),
+        updatedAt: serverTimestamp(),
+      }
+
       const storeRef = doc(database, 'stores', user.uid)
 
       if (store) {
-        await updateDoc(storeRef, {
-          name: storeName.trim(),
-          description: storeDescription.trim(),
-          category: storeCategory,
-          updatedAt: serverTimestamp(),
-        })
+        await updateDoc(storeRef, storeData)
 
         setMessage('Store details updated successfully.')
       } else {
         await setDoc(storeRef, {
-          ownerId: user.uid,
-          ownerName: user.displayName || user.email || 'Store Owner',
-          name: storeName.trim(),
-          description: storeDescription.trim(),
-          category: storeCategory,
+          ...storeData,
           status: 'Pending',
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
         })
 
         setMessage('Store application submitted. Awaiting approval.')
       }
+
+      setStoreLogo(null)
+      setStoreCover(null)
     } catch (err) {
       console.error('Store submission error:', err)
-      setError('Unable to save your store. Please try again.')
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to save your store. Please try again.'
+      )
     } finally {
       setSavingStore(false)
     }
@@ -366,19 +517,10 @@ export default function Marketplace() {
     }
 
     if (productImage) {
-      const allowedTypes = [
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-      ]
+      const imageError = validateImage(productImage)
 
-      if (!allowedTypes.includes(productImage.type)) {
-        setError('Choose a JPG, PNG or WEBP image.')
-        return
-      }
-
-      if (productImage.size > 5 * 1024 * 1024) {
-        setError('Image must be 5MB or smaller.')
+      if (imageError) {
+        setError(imageError)
         return
       }
     }
@@ -398,9 +540,10 @@ export default function Marketplace() {
       if (productImage) {
         const token = await user.getIdToken()
 
-        const uploadedImage = await uploadProductImage(
+        const uploadedImage = await uploadImage(
           productImage,
-          token
+          token,
+          'product'
         )
 
         imageUrl = uploadedImage.secure_url
@@ -585,9 +728,7 @@ export default function Marketplace() {
             </h3>
 
             <p>
-              {store
-                ? 'Keep your store information up to date.'
-                : 'Tell us about the store you want to create.'}
+              Add your store branding and business contact information.
             </p>
           </div>
         </div>
@@ -600,11 +741,7 @@ export default function Marketplace() {
           onChange={(e) => setStoreName(e.target.value)}
           maxLength={80}
           required
-          disabled={
-            savingStore ||
-            store?.status === 'Rejected' ||
-            store?.status === 'Suspended'
-          }
+          disabled={savingStore || storeLocked}
         />
 
         <label htmlFor="store-category">Business Category</label>
@@ -613,11 +750,7 @@ export default function Marketplace() {
           id="store-category"
           value={storeCategory}
           onChange={(e) => setStoreCategory(e.target.value)}
-          disabled={
-            savingStore ||
-            store?.status === 'Rejected' ||
-            store?.status === 'Suspended'
-          }
+          disabled={savingStore || storeLocked}
         >
           {categories.map((item) => (
             <option key={item} value={item}>
@@ -635,33 +768,153 @@ export default function Marketplace() {
           rows={5}
           maxLength={1000}
           required
-          disabled={
-            savingStore ||
-            store?.status === 'Rejected' ||
-            store?.status === 'Suspended'
-          }
+          disabled={savingStore || storeLocked}
         />
 
-        {store?.status !== 'Rejected' &&
-          store?.status !== 'Suspended' && (
-            <button
-              type="submit"
-              className="marketplace-button"
-              disabled={savingStore}
-            >
-              {savingStore ? (
-                <>
-                  <Loader2 className="marketplace-spinner" size={18} />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Send size={18} />
-                  {store ? 'Save Store Changes' : 'Submit Store Application'}
-                </>
-              )}
-            </button>
-          )}
+        <div className="store-image-fields">
+          <div className="store-image-field">
+            <label htmlFor="store-logo">Store Logo</label>
+
+            {store?.logoUrl && !storeLogo && (
+              <img
+                className="store-image-preview store-logo-preview"
+                src={store.logoUrl}
+                alt="Current store logo"
+              />
+            )}
+
+            <div className="product-image-upload">
+              <ImagePlus size={24} />
+
+              <input
+                id="store-logo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) =>
+                  setStoreLogo(e.target.files?.[0] || null)
+                }
+                disabled={savingStore || storeLocked}
+              />
+
+              <p>Square logo recommended. JPG, PNG or WEBP, maximum 5MB.</p>
+
+              {storeLogo && <strong>{storeLogo.name}</strong>}
+            </div>
+          </div>
+
+          <div className="store-image-field">
+            <label htmlFor="store-cover">Store Cover / Banner</label>
+
+            {store?.coverUrl && !storeCover && (
+              <img
+                className="store-image-preview store-cover-preview"
+                src={store.coverUrl}
+                alt="Current store cover"
+              />
+            )}
+
+            <div className="product-image-upload">
+              <ImagePlus size={24} />
+
+              <input
+                id="store-cover"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) =>
+                  setStoreCover(e.target.files?.[0] || null)
+                }
+                disabled={savingStore || storeLocked}
+              />
+
+              <p>Wide banner recommended. JPG, PNG or WEBP, maximum 5MB.</p>
+
+              {storeCover && <strong>{storeCover.name}</strong>}
+            </div>
+          </div>
+        </div>
+
+        <div className="store-contact-fields">
+          <h4>Business Contact Information</h4>
+
+          <label htmlFor="store-phone">Business Phone Number</label>
+
+          <input
+            id="store-phone"
+            type="tel"
+            value={storePhone}
+            onChange={(e) => setStorePhone(e.target.value)}
+            placeholder="+234..."
+            required
+            disabled={savingStore || storeLocked}
+          />
+
+          <label htmlFor="store-whatsapp">WhatsApp Number</label>
+
+          <input
+            id="store-whatsapp"
+            type="tel"
+            value={storeWhatsapp}
+            onChange={(e) => setStoreWhatsapp(e.target.value)}
+            placeholder="+234..."
+            required
+            disabled={savingStore || storeLocked}
+          />
+
+          <label htmlFor="store-email">Business Email</label>
+
+          <input
+            id="store-email"
+            type="email"
+            value={storeEmail}
+            onChange={(e) => setStoreEmail(e.target.value)}
+            placeholder="business@example.com"
+            required
+            disabled={savingStore || storeLocked}
+          />
+
+          <label htmlFor="store-location">Business Location</label>
+
+          <input
+            id="store-location"
+            value={storeLocation}
+            onChange={(e) => setStoreLocation(e.target.value)}
+            placeholder="City, State, Country"
+            required
+            disabled={savingStore || storeLocked}
+          />
+
+          <label htmlFor="store-social">Instagram or Social Media Link</label>
+
+          <input
+            id="store-social"
+            type="url"
+            value={storeSocialLink}
+            onChange={(e) => setStoreSocialLink(e.target.value)}
+            placeholder="https://instagram.com/yourstore"
+            required
+            disabled={savingStore || storeLocked}
+          />
+        </div>
+
+        {!storeLocked && (
+          <button
+            type="submit"
+            className="marketplace-button"
+            disabled={savingStore}
+          >
+            {savingStore ? (
+              <>
+                <Loader2 className="marketplace-spinner" size={18} />
+                Saving store...
+              </>
+            ) : (
+              <>
+                <Send size={18} />
+                {store ? 'Save Store Changes' : 'Submit Store Application'}
+              </>
+            )}
+          </button>
+        )}
       </form>
 
       {/* PRODUCT MANAGEMENT */}
@@ -781,9 +1034,7 @@ export default function Marketplace() {
                 disabled={savingProduct}
               />
 
-              <label htmlFor="product-image">
-                Product Image
-              </label>
+              <label htmlFor="product-image">Product Image</label>
 
               <div className="product-image-upload">
                 <ImagePlus size={24} />
@@ -799,13 +1050,9 @@ export default function Marketplace() {
                   required={!editingProductId}
                 />
 
-                <p>
-                  JPG, PNG or WEBP. Maximum size: 5MB.
-                </p>
+                <p>JPG, PNG or WEBP. Maximum size: 5MB.</p>
 
-                {productImage && (
-                  <strong>{productImage.name}</strong>
-                )}
+                {productImage && <strong>{productImage.name}</strong>}
 
                 {!productImage && editingProductId && (
                   <p>Leave empty to keep the existing image.</p>
@@ -940,7 +1187,6 @@ export default function Marketplace() {
               </div>
             )}
           </div>
-
         </div>
       )}
 
