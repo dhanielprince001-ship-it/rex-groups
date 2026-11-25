@@ -6105,3 +6105,81 @@ h2 em {
     flex-direction: column;
   }
 }
+
+/* Buyer order tracking: badges, delivery info, step dates */
+.rex-order-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.rex-pay-badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rex-pay-badge.paid {
+  background: rgba(46, 125, 70, 0.14);
+  color: #2e7d46;
+}
+
+.rex-pay-badge.partial {
+  background: rgba(196, 128, 0, 0.16);
+  color: #9a6400;
+}
+
+.rex-pay-badge.unpaid {
+  background: rgba(190, 60, 60, 0.12);
+  color: #b03a3a;
+}
+
+.rex-package-pay {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.rex-package-pay small {
+  color: var(--rm-muted);
+}
+
+.rex-package-pay b {
+  margin-left: auto;
+}
+
+.rex-delivery {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--rm-bg);
+  font-size: 14px;
+}
+
+.rex-delivery svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.rex-delivery p {
+  margin: 4px 0 2px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.rex-delivery small {
+  color: var(--rm-muted);
+}
+
+.rex-tracker li small {
+  color: var(--rm-muted);
+  font-size: 11px;
+}
