@@ -41,6 +41,14 @@ function validText(value: unknown, maxLength: number) {
   )
 }
 
+// Firestore timestamps do not survive JSON.stringify in a usable shape,
+// so send them as { seconds } which the browser code expects.
+function toSeconds(value: unknown): { seconds: number } | null {
+  const seconds = (value as { seconds?: unknown } | null)?.seconds
+
+  return typeof seconds === 'number' ? { seconds } : null
+}
+
 const allowedStatuses = [
   'Processing',
   'Shipped',
@@ -88,17 +96,23 @@ export default async function handler(
         .limit(100)
         .get()
 
-      const orders = snapshot.docs.map((order) => ({
-        id: order.id,
-        ...order.data(),
-      }))
+      const orders = snapshot.docs.map((order) => {
+        const data = order.data()
+
+        return {
+          id: order.id,
+          ...data,
+          createdAt: toSeconds(data.createdAt),
+          updatedAt: toSeconds(data.updatedAt),
+          paidAt: toSeconds(data.paidAt),
+          shippedAt: toSeconds(data.shippedAt),
+          deliveredAt: toSeconds(data.deliveredAt),
+        }
+      })
 
       orders.sort((a, b) => {
-        const first =
-          (a.createdAt as { seconds?: number })?.seconds || 0
-
-        const second =
-          (b.createdAt as { seconds?: number })?.seconds || 0
+        const first = a.createdAt?.seconds || 0
+        const second = b.createdAt?.seconds || 0
 
         return second - first
       })
@@ -114,6 +128,52 @@ export default async function handler(
 
     const sellerOrderId = body.sellerOrderId
     const newStatus = body.status
+    // Seller confirms they received the customer's payment
+    // (bank transfer or cash on delivery) so fulfilment can begin.
+    if (body.action === 'confirmPayment') {
+      if (!validText(body.sellerOrderId, 150)) {
+        return res.status(400).json({
+          error: 'A valid seller order ID is required.',
+        })
+      }
+
+      const paymentRef = database
+        .collection('sellerOrders')
+        .doc(body.sellerOrderId)
+
+      await database.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(paymentRef)
+
+        if (!snapshot.exists) throw new Error('ORDER_NOT_FOUND')
+
+        const order = snapshot.data()!
+
+        if (order.sellerId !== sellerId) {
+          throw new Error('NOT_ORDER_OWNER')
+        }
+
+        if (
+          order.paymentStatus === 'Paid' ||
+          order.status !== 'Awaiting Payment'
+        ) {
+          throw new Error('ALREADY_PAID')
+        }
+
+        transaction.update(paymentRef, {
+          paymentStatus: 'Paid',
+          status: 'Awaiting Fulfilment',
+          paymentConfirmedBy: 'seller',
+          paidAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      })
+
+      return res.status(200).json({
+        success: true,
+        message: 'Payment confirmed. You can now process this order.',
+      })
+    }
+
     const trackingNumber = body.trackingNumber || ''
     const shippingCarrier = body.shippingCarrier || ''
 
@@ -228,6 +288,10 @@ export default async function handler(
         NOT_ORDER_OWNER: {
           status: 403,
           message: 'You cannot update another seller’s order.',
+        },
+        ALREADY_PAID: {
+          status: 400,
+          message: 'Payment was already confirmed for this order.',
         },
         PAYMENT_NOT_CONFIRMED: {
           status: 403,
