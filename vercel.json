@@ -7,6 +7,10 @@
     {
       "source": "/__/firebase/init.json",
       "destination": "https://rex-groups.firebaseapp.com/__/firebase/init.json"
+    },
+    {
+      "source": "/((?!api/|__/|assets/).*)",
+      "destination": "/index.html"
     }
   ]
 }
