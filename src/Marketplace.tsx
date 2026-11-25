@@ -226,12 +226,9 @@ export default function Marketplace() {
   const uid = user?.uid
   const hasStore = store !== null
 
-  // Fill the store form once per subscription so live updates
-  // (e.g. an admin approval) never overwrite what the seller is typing.
   const formSyncedRef = useRef(false)
   const feedbackRef = useRef<HTMLDivElement | null>(null)
 
-  // Bring success / error messages into view
   useEffect(() => {
     if (message || error) {
       feedbackRef.current?.scrollIntoView({
@@ -285,7 +282,6 @@ export default function Marketplace() {
         }
 
         formSyncedRef.current = true
-
         setLoadingStore(false)
       },
       (err) => {
@@ -490,7 +486,6 @@ export default function Marketplace() {
 
       if (store) {
         await updateDoc(storeRef, storeData)
-
         setMessage('Store details updated successfully.')
       } else {
         await setDoc(storeRef, {
@@ -608,7 +603,7 @@ export default function Marketplace() {
         category: productCategory,
         imageUrl,
         publicId,
-        status: 'Pending' as ProductStatus,
+        status: 'Approved' as ProductStatus,
         updatedAt: serverTimestamp(),
       }
 
@@ -618,16 +613,16 @@ export default function Marketplace() {
           productData
         )
 
-        setMessage(
-          'Product updated. It has been sent back for admin approval.'
-        )
+        setMessage('Product updated and published successfully.')
       } else {
         await addDoc(collection(database, 'products'), {
           ...productData,
           createdAt: serverTimestamp(),
         })
 
-        setMessage('Product submitted successfully. Awaiting approval.')
+        setMessage(
+          'Product published successfully. It is now live in your store.'
+        )
       }
 
       resetProductForm()
@@ -672,7 +667,6 @@ export default function Marketplace() {
 
     try {
       await deleteDoc(doc(database, 'products', product.id))
-
       setMessage('Product deleted successfully.')
     } catch (err) {
       console.error('Product deletion error:', err)
@@ -713,7 +707,6 @@ export default function Marketplace() {
 
   return (
     <section className="marketplace-section" id="marketplace">
-
       <div className="marketplace-heading">
         <span className="marketplace-eyebrow">
           REX GROUPS MARKETPLACE
@@ -760,7 +753,7 @@ export default function Marketplace() {
         </div>
       )}
 
-      {/* FEEDBACK (shown once, scrolled into view) */}
+      {/* FEEDBACK */}
       <div ref={feedbackRef}>
         {error && (
           <div className="marketplace-error" role="alert">
@@ -983,7 +976,6 @@ export default function Marketplace() {
       {/* PRODUCT MANAGEMENT */}
       {store?.status === 'Approved' && (
         <div className="seller-products">
-
           <div className="seller-products-heading">
             <div>
               <span className="marketplace-eyebrow">
@@ -993,7 +985,7 @@ export default function Marketplace() {
               <h3>Manage Products</h3>
 
               <p>
-                Add products and submit them for Rex Groups approval.
+                Add products and publish them instantly to your approved store.
               </p>
             </div>
 
@@ -1035,8 +1027,8 @@ export default function Marketplace() {
 
                   <p>
                     {editingProductId
-                      ? 'Changes will require admin approval again.'
-                      : 'Your product will be reviewed before publication.'}
+                      ? 'Update your product details and publish your changes.'
+                      : 'Your product will be published as soon as you add it.'}
                   </p>
                 </div>
               </div>
@@ -1141,7 +1133,7 @@ export default function Marketplace() {
                       <Send size={18} />
                       {editingProductId
                         ? 'Save Product Changes'
-                        : 'Submit Product for Approval'}
+                        : 'Publish Product'}
                     </>
                   )}
                 </button>
@@ -1240,7 +1232,6 @@ export default function Marketplace() {
           your application.
         </p>
       )}
-
     </section>
   )
 }
