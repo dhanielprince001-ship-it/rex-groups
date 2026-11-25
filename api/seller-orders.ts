@@ -1,3 +1,4 @@
+
 import {
   initializeApp,
   getApps,
@@ -40,7 +41,6 @@ function validText(value: unknown, maxLength: number) {
   )
 }
 
-// Convert Firestore timestamps into JSON-safe values.
 function toSeconds(value: unknown): { seconds: number } | null {
   const seconds = (value as { seconds?: unknown } | null)?.seconds
 
@@ -86,7 +86,6 @@ export default async function handler(
 
     const sellerId = decodedToken.uid
 
-    // GET: Retrieve only this seller's orders.
     if (req.method === 'GET') {
       const snapshot = await database
         .collection('sellerOrders')
@@ -103,6 +102,7 @@ export default async function handler(
           createdAt: toSeconds(data.createdAt),
           updatedAt: toSeconds(data.updatedAt),
           paidAt: toSeconds(data.paidAt),
+          processingAt: toSeconds(data.processingAt),
           shippedAt: toSeconds(data.shippedAt),
           deliveredAt: toSeconds(data.deliveredAt),
         }
@@ -121,14 +121,11 @@ export default async function handler(
       })
     }
 
-    // PATCH: Update fulfilment information.
     const body = req.body || {}
 
     const sellerOrderId = body.sellerOrderId
     const newStatus = body.status
 
-    // Payment confirmation is server-controlled.
-    // Sellers cannot mark an order as paid.
     const trackingNumber = body.trackingNumber || ''
     const shippingCarrier = body.shippingCarrier || ''
 
@@ -138,7 +135,10 @@ export default async function handler(
       })
     }
 
-    if (!allowedStatuses.includes(newStatus)) {
+    if (
+      typeof newStatus !== 'string' ||
+      !allowedStatuses.includes(newStatus)
+    ) {
       return res.status(400).json({
         error: 'Invalid fulfilment status.',
       })
@@ -169,12 +169,10 @@ export default async function handler(
 
         const order = orderSnapshot.data()!
 
-        // Sellers can only update their own orders.
         if (order.sellerId !== sellerId) {
           throw new Error('NOT_ORDER_OWNER')
         }
 
-        // Sellers cannot change payment status.
         if (order.paymentStatus !== 'Paid') {
           throw new Error('PAYMENT_NOT_CONFIRMED')
         }
@@ -200,6 +198,10 @@ export default async function handler(
         const updateData: Record<string, unknown> = {
           status: newStatus,
           updatedAt: FieldValue.serverTimestamp(),
+        }
+
+        if (newStatus === 'Processing') {
+          updateData.processingAt = FieldValue.serverTimestamp()
         }
 
         if (newStatus === 'Shipped') {
@@ -243,10 +245,6 @@ export default async function handler(
         NOT_ORDER_OWNER: {
           status: 403,
           message: 'You cannot update another seller’s order.',
-        },
-        ALREADY_PAID: {
-          status: 400,
-          message: 'Payment was already confirmed for this order.',
         },
         PAYMENT_NOT_CONFIRMED: {
           status: 403,
