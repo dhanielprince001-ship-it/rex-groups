@@ -132,7 +132,10 @@ export default function MarketplaceCheckout() {
           <ShoppingBag size={38} />
           <h1>Sign in to continue.</h1>
           <p>You need a Rex Groups account to complete checkout.</p>
-          <Link className="rex-market-primary-link" to="/#account">
+          <Link
+            className="rex-market-primary-link"
+            to="/?returnTo=%2Fmarketplace%2Fcheckout#account"
+          >
             Sign in or register
           </Link>
         </section>
