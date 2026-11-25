@@ -1,5 +1,6 @@
 
-import { Link, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, Route, Routes, useLocation } from 'react-router-dom'
 
 import SiteLayout from './SiteLayout'
 import HomePage from './HomePage'
@@ -9,6 +10,75 @@ import MarketplaceCart from './MarketplaceCart'
 import MarketplaceStore from './MarketplaceStore'
 import MarketplaceCheckout from './MarketplaceCheckout'
 import { CartProvider } from './CartContext'
+
+const BASE_TITLE = 'Rex Groups'
+
+function getPageTitle(pathname: string) {
+  if (pathname === '/') {
+    return 'Rex Groups | Technology. Business. Innovation.'
+  }
+
+  if (pathname === '/marketplace') return `Marketplace | ${BASE_TITLE}`
+  if (pathname === '/marketplace/cart') return `Cart | ${BASE_TITLE}`
+  if (pathname === '/marketplace/checkout') return `Checkout | ${BASE_TITLE}`
+  if (pathname === '/marketplace/seller') return `Sell on Marketplace | ${BASE_TITLE}`
+  if (pathname.startsWith('/marketplace/store/')) return `Store | ${BASE_TITLE}`
+  if (pathname.startsWith('/marketplace/product/')) return `Product | ${BASE_TITLE}`
+
+  return `Page not found | ${BASE_TITLE}`
+}
+
+// Runs for every route (corporate site and marketplace):
+// sets the page title and scrolls to the top or to a #hash target.
+function RouteEffects() {
+  const { pathname, hash, key } = useLocation()
+
+  useEffect(() => {
+    document.title = getPageTitle(pathname)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!hash) {
+      // Jump to the top without the page-wide smooth scrolling.
+      const root = document.documentElement
+      root.style.scrollBehavior = 'auto'
+      window.scrollTo(0, 0)
+      root.style.scrollBehavior = ''
+      return
+    }
+
+    let id = hash.slice(1)
+
+    try {
+      id = decodeURIComponent(id)
+    } catch {
+      // Keep the raw hash if it is not valid URI encoding.
+    }
+
+    let attempts = 0
+    let timer = 0
+
+    // The target may not be rendered yet right after a page change.
+    const tryScroll = () => {
+      const target = document.getElementById(id)
+
+      if (target) {
+        target.scrollIntoView()
+        return
+      }
+
+      if (attempts++ < 20) {
+        timer = window.setTimeout(tryScroll, 50)
+      }
+    }
+
+    tryScroll()
+
+    return () => window.clearTimeout(timer)
+  }, [pathname, hash, key])
+
+  return null
+}
 
 function NotFound() {
   return (
@@ -78,6 +148,8 @@ function MarketplacePlaceholder({
 export default function App() {
   return (
     <CartProvider>
+      <RouteEffects />
+
       <Routes>
         {/* CORPORATE WEBSITE */}
         <Route element={<SiteLayout />}>
