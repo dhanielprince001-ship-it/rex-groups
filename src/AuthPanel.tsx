@@ -621,8 +621,11 @@ export function AuthSection() {
 
     // Only known internal pages are allowed (no open redirects).
     if (
-      returnTo === '/marketplace/checkout' ||
-      returnTo === '/marketplace/seller'
+      returnTo &&
+      (returnTo === '/marketplace/checkout' ||
+      returnTo === '/marketplace/seller' ||
+      returnTo === '/marketplace/orders' ||
+      /^\/marketplace\/store\/[A-Za-z0-9_-]+$/.test(returnTo))
     ) {
       navigate(returnTo, { replace: true })
     }
