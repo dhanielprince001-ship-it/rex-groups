@@ -168,7 +168,10 @@ export default function MarketplaceCheckout() {
             Payment has not been collected yet. We'll connect payment
             processing in the next stage.
           </p>
-          <Link className="rex-market-primary-link" to="/marketplace">
+          <Link className="rex-market-primary-link" to="/marketplace/orders">
+            Track my order
+          </Link>
+          <Link className="rex-market-text-link" to="/marketplace">
             Continue shopping
           </Link>
         </section>
