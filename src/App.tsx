@@ -9,6 +9,7 @@ import MarketplaceHome from './MarketplaceHome'
 import MarketplaceCart from './MarketplaceCart'
 import MarketplaceStore from './MarketplaceStore'
 import MarketplaceCheckout from './MarketplaceCheckout'
+import MarketplaceOrders from './MarketplaceOrders'
 import { CartProvider } from './CartContext'
 
 const BASE_TITLE = 'Rex Groups'
@@ -21,6 +22,7 @@ function getPageTitle(pathname: string) {
   if (pathname === '/marketplace') return `Marketplace | ${BASE_TITLE}`
   if (pathname === '/marketplace/cart') return `Cart | ${BASE_TITLE}`
   if (pathname === '/marketplace/checkout') return `Checkout | ${BASE_TITLE}`
+  if (pathname === '/marketplace/orders') return `My orders | ${BASE_TITLE}`
   if (pathname === '/marketplace/seller') return `Sell on Marketplace | ${BASE_TITLE}`
   if (pathname.startsWith('/marketplace/store/')) return `Store | ${BASE_TITLE}`
   if (pathname.startsWith('/marketplace/product/')) return `Product | ${BASE_TITLE}`
@@ -173,6 +175,12 @@ export default function App() {
         <Route
           path="/marketplace/checkout"
           element={<MarketplaceCheckout />}
+        />
+
+        {/* BUYER ORDER TRACKING */}
+        <Route
+          path="/marketplace/orders"
+          element={<MarketplaceOrders />}
         />
 
         {/* SELLER DASHBOARD */}
