@@ -506,58 +506,6 @@ export default function Marketplace() {
     }
   }
 
-  // CONFIRM PAYMENT RECEIVED (bank transfer / cash on delivery)
-  async function confirmSellerPayment(order: SellerOrder) {
-    if (!user) {
-      setError('Please sign in again.')
-      return
-    }
-
-    if (
-      !window.confirm(
-        'Confirm that you have received payment for this order?',
-      )
-    ) {
-      return
-    }
-
-    setUpdatingOrder(order.id)
-    setError('')
-    setMessage('')
-
-    try {
-      const token = await user.getIdToken()
-
-      const response = await fetch('/api/seller-orders', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'confirmPayment',
-          sellerOrderId: order.id,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Unable to confirm payment.')
-      }
-
-      setMessage(data.message || 'Payment confirmed.')
-
-      await loadSellerOrders()
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unable to confirm payment.',
-      )
-    } finally {
-      setUpdatingOrder(null)
-    }
-  }
-
   // RESET PRODUCT FORM
   function resetProductForm() {
     setEditingProductId(null)
@@ -1299,7 +1247,11 @@ export default function Marketplace() {
                           <div>
                             <strong>{item.name}</strong>
                             <p>Quantity: {item.quantity}</p>
-                            <p>{naira.format(item.unitPrice ?? item.price ?? 0)}</p>
+                            <p>
+                              {naira.format(
+                                item.unitPrice ?? item.price ?? 0
+                              )}
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -1438,23 +1390,10 @@ export default function Marketplace() {
                     )}
 
                     {order.paymentStatus !== 'Paid' && (
-                      <>
-                        <p className="seller-order-payment-notice">
-                          Fulfilment actions become available once you have
-                          received the customer's payment.
-                        </p>
-
-                        <button
-                          type="button"
-                          className="marketplace-button"
-                          onClick={() => void confirmSellerPayment(order)}
-                          disabled={updatingOrder === order.id}
-                        >
-                          {updatingOrder === order.id
-                            ? 'Updating...'
-                            : 'Confirm payment received'}
-                        </button>
-                      </>
+                      <p className="seller-order-payment-notice">
+                        Waiting for secure payment confirmation. Fulfilment
+                        actions will become available once payment is verified.
+                      </p>
                     )}
                   </article>
                 ))}
