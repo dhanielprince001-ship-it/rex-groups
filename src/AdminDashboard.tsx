@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -39,10 +38,11 @@ import {
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import { EMAILJS_PUBLIC_KEY, EMAILJS_SERVICE_ID } from './siteConfig'
+import AdminMarketplaceManagement from './AdminMarketplaceManagement'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
-// EmailJS configuration (service and public key are shared in siteConfig)
+// EmailJS configuration
 const EMAILJS_REPLY_TEMPLATE_ID = 'template_e2pq1x7'
 
 type EnquiryStatus = 'Pending' | 'Contacted' | 'Completed'
@@ -198,12 +198,10 @@ export default function AdminDashboard() {
   const [enquirySearch, setEnquirySearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('All')
 
-  // Customer email reply state
   const [replyingTo, setReplyingTo] = useState('')
   const [replyMessage, setReplyMessage] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
 
-  // Public review reply state
   const [replyingToReview, setReplyingToReview] = useState('')
   const [reviewReplyMessage, setReviewReplyMessage] = useState('')
   const [savingReviewReply, setSavingReviewReply] = useState(false)
@@ -233,7 +231,6 @@ export default function AdminDashboard() {
     })
   }, [enquiries, enquirySearch, statusFilter])
 
-  // Load enquiries, customers, reviews and stores
   useEffect(() => {
     if (!authReady || !isAdmin) {
       setLoading(false)
@@ -359,7 +356,7 @@ export default function AdminDashboard() {
       },
       (err) => {
         console.error('Stores error:', err)
-        setError('Unable to load store applications. Check Firestore rules.')
+        setError('Unable to load store applications. Check your Firestore rules.')
         setStoresLoading(false)
       },
     )
@@ -372,7 +369,6 @@ export default function AdminDashboard() {
     }
   }, [authReady, isAdmin])
 
-  // Update enquiry status
   async function changeStatus(id: string, status: EnquiryStatus) {
     const firestore = db
     if (!firestore || !isAdmin) return
@@ -396,7 +392,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Approve or reject a review
   async function changeReviewStatus(id: string, status: ReviewStatus) {
     const firestore = db
     if (!firestore || !isAdmin) return
@@ -420,7 +415,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Approve, reject or suspend a store
   async function changeStoreStatus(id: string, status: StoreStatus) {
     const firestore = db
 
@@ -448,7 +442,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Delete a review
   async function removeReview(id: string) {
     const firestore = db
     if (!firestore || !isAdmin) return
@@ -470,7 +463,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Publish or update a company reply to a review
   async function saveReviewReply(review: Review) {
     const firestore = db
     const message = reviewReplyMessage.trim()
@@ -516,7 +508,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Remove a published company reply
   async function removeReviewReply(id: string) {
     const firestore = db
     if (!firestore || !isAdmin) return
@@ -542,7 +533,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Send customer email reply
   async function sendCustomerReply(item: Enquiry) {
     const message = replyMessage.trim()
 
@@ -646,7 +636,6 @@ export default function AdminDashboard() {
     )
   }
 
-  // Statistics
   const pending = enquiries.filter(
     (item) => (item.status || 'Pending') === 'Pending',
   ).length
@@ -669,7 +658,6 @@ export default function AdminDashboard() {
 
   const now = new Date()
 
-  // Six-month analytics
   const monthlyData = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(
       now.getFullYear(),
@@ -698,7 +686,6 @@ export default function AdminDashboard() {
     1,
   )
 
-  // Customer search
   const filteredCustomers = customers.filter((customer) => {
     const search = customerSearch.trim().toLowerCase()
     if (!search) return true
@@ -762,7 +749,6 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Statistics */}
         <div className="admin-stats">
           <div className="admin-stat">
             <Inbox size={22} />
@@ -795,7 +781,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Marketplace store approvals */}
+        {/* Store applications */}
         <div className="admin-list-heading">
           <div>
             <span className="section-kicker">MARKETPLACE MANAGEMENT</span>
@@ -841,9 +827,7 @@ export default function AdminDashboard() {
                   </p>
 
                   <div className="admin-enquiry-bottom">
-                    <small>
-                      Applied: {formatDate(store.createdAt)}
-                    </small>
+                    <small>Applied: {formatDate(store.createdAt)}</small>
 
                     <div className="admin-report-actions">
                       <button
@@ -886,6 +870,9 @@ export default function AdminDashboard() {
             })}
           </div>
         )}
+
+        {/* NEW: Full marketplace administration */}
+        <AdminMarketplaceManagement />
 
         {/* Analytics */}
         <div className="admin-analytics-grid">
@@ -1059,7 +1046,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Review moderation and company replies */}
+        {/* Review moderation */}
         <div className="admin-list-heading">
           <div>
             <span className="section-kicker">REVIEW MODERATION</span>
