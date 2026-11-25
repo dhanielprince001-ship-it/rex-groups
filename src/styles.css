@@ -5107,73 +5107,24 @@ h2 em {
     padding-top: 25px;
   }
 }
+/* BRIGHT REX MARKETPLACE BUTTONS */
 
-/* MARKETPLACE BUTTON IMPROVEMENTS */
-
-/* Cart: Proceed to checkout */
-.rex-cart-checkout {
-  display: flex !important;
-  width: 100% !important;
-  min-height: 58px !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 16px 24px !important;
-  background: #78934b !important;
-  color: #ffffff !important;
-  border: none !important;
-  border-radius: 12px !important;
-  font-size: 17px !important;
-  font-weight: 700 !important;
-  text-align: center !important;
-  text-decoration: none !important;
-  cursor: pointer !important;
-  transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.rex-cart-checkout:hover {
-  background: #627b3b !important;
-  transform: translateY(-2px);
-}
-
-/* Checkout: Submit order */
+.rex-cart-checkout,
 .rex-checkout-submit {
-  display: flex !important;
-  width: 100% !important;
-  min-height: 60px !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 17px 24px !important;
-  background: #78934b !important;
-  color: #ffffff !important;
+  background: #A5C957 !important;
+  color: #17210D !important;
   border: none !important;
-  border-radius: 12px !important;
-  font-size: 17px !important;
-  font-weight: 700 !important;
-  cursor: pointer !important;
-  transition: background 0.2s ease, transform 0.2s ease;
+  font-weight: 800 !important;
+  box-shadow: 0 5px 16px rgba(165, 201, 87, 0.22);
 }
 
+.rex-cart-checkout:hover,
 .rex-checkout-submit:hover:not(:disabled) {
-  background: #627b3b !important;
-  transform: translateY(-2px);
+  background: #B7D96B !important;
 }
 
 .rex-checkout-submit:disabled {
-  background: #a6b292 !important;
-  color: #ffffff !important;
-  cursor: not-allowed !important;
+  background: #D0E2A5 !important;
+  color: #53633A !important;
   opacity: 1 !important;
 }
-
-/* Mobile spacing */
-@media (max-width: 600px) {
-  .rex-cart-checkout,
-  .rex-checkout-submit {
-    min-height: 58px !important;
-    font-size: 16px !important;
-    border-radius: 10px !important;
-  }
-}
-
-
-
