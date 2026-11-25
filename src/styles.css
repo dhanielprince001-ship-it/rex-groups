@@ -5373,3 +5373,229 @@ h2 em {
 }
 
 
+/* =====================================
+   SELLER PAGE BAR + PREVIOUSLY UNSTYLED CLASSES
+===================================== */
+
+.marketplace-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.marketplace-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.marketplace-page-bar a:hover {
+  color: var(--accentInk);
+}
+
+/* Store logo / cover upload fields */
+.store-image-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.store-image-field {
+  min-width: 0;
+}
+
+.store-image-preview {
+  display: block;
+  width: 100%;
+  margin: 8px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+  object-fit: cover;
+}
+
+.store-logo-preview {
+  width: 96px;
+  height: 96px;
+}
+
+.store-cover-preview {
+  height: 120px;
+}
+
+.store-contact-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.store-contact-fields h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+/* Customer account: edit form and enquiry history */
+.account-edit-form {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}
+
+.account-history {
+  margin: 24px 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.account-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.account-history-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.account-history-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.account-enquiry-list {
+  display: grid;
+  gap: 12px;
+}
+
+.account-enquiry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+.account-enquiry > div {
+  min-width: 0;
+}
+
+.account-enquiry p {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.account-enquiry small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Admin: success banner, replies, phone link */
+.admin-success {
+  padding: 14px;
+  margin-bottom: 20px;
+  background: var(--surface);
+  border: 1px solid #5f9f6e;
+  border-radius: 7px;
+  color: #8fd19e;
+  font-size: 12px;
+}
+
+.admin-customer-phone {
+  color: var(--accentInk);
+}
+
+.admin-company-reply {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-left: 3px solid #f28c28;
+  border-radius: 8px;
+  background: rgba(242, 140, 40, 0.08);
+}
+
+.admin-company-reply strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f28c28;
+}
+
+.admin-company-reply p {
+  margin: 8px 0;
+  line-height: 1.7;
+}
+
+.admin-company-reply small {
+  color: var(--muted);
+}
+
+.admin-review-reply-area {
+  margin-top: 14px;
+}
+
+.admin-reply-box {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+.admin-reply-box p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-reply-box textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.admin-reply-box textarea:focus-visible {
+  outline: 2px solid var(--accentInk);
+  outline-offset: 0;
+}
+
+.admin-reply-box small {
+  color: var(--muted);
+}
+
+.admin-reply-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .store-image-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .account-enquiry {
+    flex-direction: column;
+  }
+}
