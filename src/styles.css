@@ -6221,3 +6221,26 @@ h2 em {
     padding: 12px 14px;
   }
 }
+
+.rex-order-total {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rex-border, #e5e5e5);
+}
+
+.rex-order-total > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.rex-order-grand-total {
+  padding-top: 12px;
+  border-top: 1px solid var(--rex-border, #e5e5e5);
+  font-size: 1.05rem;
+}
+
+
+
