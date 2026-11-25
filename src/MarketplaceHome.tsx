@@ -219,6 +219,7 @@ export default function MarketplaceHome() {
         <nav className="rex-market-nav" aria-label="Marketplace navigation">
           <a href="#market-products">Shop products</a>
           <a href="#market-stores">Explore stores</a>
+          <Link to="/marketplace/orders">My orders</Link>
           <Link to="/">Rex Groups</Link>
 
           <Link
