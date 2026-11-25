@@ -26,7 +26,10 @@ export default function MarketplaceCart() {
           <span>REX <b>MARKETPLACE</b></span>
         </Link>
 
-        <Link to="/marketplace">Continue shopping</Link>
+        <nav className="rex-market-nav">
+          <Link to="/marketplace/orders">My orders</Link>
+          <Link to="/marketplace">Continue shopping</Link>
+        </nav>
       </header>
 
       <section className="rex-cart-content">
