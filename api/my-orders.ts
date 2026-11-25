@@ -1,3 +1,4 @@
+
 import {
   initializeApp,
   getApps,
@@ -39,9 +40,6 @@ type PackageSummary = {
   paymentStatus: string
 }
 
-// The parent order document is never updated after checkout, so its own
-// status would say "Awaiting Payment" forever. Derive the buyer-facing
-// status from the seller packages instead.
 function rollUpPaymentStatus(
   packages: PackageSummary[],
   fallback: string,
@@ -68,7 +66,9 @@ function rollUpStatus(packages: PackageSummary[], fallback: string) {
   }
 
   if (statuses.some((status) => status === 'Shipped' || status === 'Delivered')) {
-    return statuses.every((status) => status === 'Shipped' || status === 'Delivered')
+    return statuses.every(
+      (status) => status === 'Shipped' || status === 'Delivered',
+    )
       ? 'Shipped'
       : 'Partially Shipped'
   }
@@ -78,8 +78,6 @@ function rollUpStatus(packages: PackageSummary[], fallback: string) {
   return 'Awaiting Fulfilment'
 }
 
-// Buyer order tracking: returns only the signed-in customer's own orders,
-// each with one "package" per seller. Commission data is never exposed.
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -89,7 +87,9 @@ export default async function handler(
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
 
-    return res.status(405).json({ error: 'Method not allowed.' })
+    return res.status(405).json({
+      error: 'Method not allowed.',
+    })
   }
 
   try {
@@ -116,6 +116,7 @@ export default async function handler(
         .where('customerId', '==', uid)
         .limit(100)
         .get(),
+
       database
         .collection('sellerOrders')
         .where('customerId', '==', uid)
@@ -140,6 +141,7 @@ export default async function handler(
         trackingNumber: data.trackingNumber || '',
         shippingCarrier: data.shippingCarrier || '',
         paidAt: toSeconds(data.paidAt),
+        processingAt: toSeconds(data.processingAt),
         shippedAt: toSeconds(data.shippedAt),
         deliveredAt: toSeconds(data.deliveredAt),
         updatedAt: toSeconds(data.updatedAt),
@@ -155,15 +157,22 @@ export default async function handler(
       .map((item) => {
         const data = item.data()
 
-        const packages = (packagesByOrder.get(item.id) || []) as PackageSummary[]
+        const packages = (
+          packagesByOrder.get(item.id) || []
+        ) as PackageSummary[]
 
         return {
           id: item.id,
           subtotal: data.subtotal || 0,
           deliveryFee:
-            typeof data.deliveryFee === 'number' ? data.deliveryFee : null,
+            typeof data.deliveryFee === 'number'
+              ? data.deliveryFee
+              : null,
           currency: data.currency || 'NGN',
-          status: rollUpStatus(packages, data.status || 'Awaiting Payment'),
+          status: rollUpStatus(
+            packages,
+            data.status || 'Awaiting Payment',
+          ),
           paymentStatus: rollUpPaymentStatus(
             packages,
             data.paymentStatus || 'Unpaid',
@@ -175,10 +184,14 @@ export default async function handler(
       })
       .sort(
         (a, b) =>
-          (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0),
+          (b.createdAt?.seconds || 0) -
+          (a.createdAt?.seconds || 0),
       )
 
-    return res.status(200).json({ success: true, orders })
+    return res.status(200).json({
+      success: true,
+      orders,
+    })
   } catch (error) {
     console.error('My orders API error:', error)
 
