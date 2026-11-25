@@ -1,5 +1,5 @@
 
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router-dom'
 
 import SiteLayout from './SiteLayout'
@@ -31,8 +31,6 @@ function getPageTitle(pathname: string) {
   return `Page not found | ${BASE_TITLE}`
 }
 
-// Runs for every route (corporate site and marketplace):
-// sets the page title and scrolls to the top or to a #hash target.
 function RouteEffects() {
   const { pathname, hash, key } = useLocation()
 
@@ -42,7 +40,6 @@ function RouteEffects() {
 
   useEffect(() => {
     if (!hash) {
-      // Jump to the top without the page-wide smooth scrolling.
       const root = document.documentElement
       root.style.scrollBehavior = 'auto'
       window.scrollTo(0, 0)
@@ -55,13 +52,12 @@ function RouteEffects() {
     try {
       id = decodeURIComponent(id)
     } catch {
-      // Keep the raw hash if it is not valid URI encoding.
+      // Keep the raw hash.
     }
 
     let attempts = 0
     let timer = 0
 
-    // The target may not be rendered yet right after a page change.
     const tryScroll = () => {
       const target = document.getElementById(id)
 
@@ -81,6 +77,20 @@ function RouteEffects() {
   }, [pathname, hash, key])
 
   return null
+}
+
+// The floating tracking button appears only on marketplace pages.
+function MarketplaceRoute({
+  children,
+}: {
+  children: ReactNode
+}) {
+  return (
+    <>
+      <TrackOrderButton />
+      {children}
+    </>
+  )
 }
 
 function NotFound() {
@@ -152,58 +162,81 @@ export default function App() {
   return (
     <CartProvider>
       <RouteEffects />
-      <TrackOrderButton />
 
       <Routes>
-        {/* CORPORATE WEBSITE */}
+        {/* CORPORATE WEBSITE - NO FLOATING TRACKING BUTTON */}
         <Route element={<SiteLayout />}>
           <Route index element={<HomePage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
 
-        {/* MARKETPLACE */}
+        {/* MARKETPLACE HOME */}
         <Route
           path="/marketplace"
-          element={<MarketplaceHome />}
+          element={
+            <MarketplaceRoute>
+              <MarketplaceHome />
+            </MarketplaceRoute>
+          }
         />
 
         {/* SHOPPING CART */}
         <Route
           path="/marketplace/cart"
-          element={<MarketplaceCart />}
+          element={
+            <MarketplaceRoute>
+              <MarketplaceCart />
+            </MarketplaceRoute>
+          }
         />
 
         {/* CHECKOUT */}
         <Route
           path="/marketplace/checkout"
-          element={<MarketplaceCheckout />}
+          element={
+            <MarketplaceRoute>
+              <MarketplaceCheckout />
+            </MarketplaceRoute>
+          }
         />
 
         {/* BUYER ORDER TRACKING */}
         <Route
           path="/marketplace/orders"
-          element={<MarketplaceOrders />}
+          element={
+            <MarketplaceRoute>
+              <MarketplaceOrders />
+            </MarketplaceRoute>
+          }
         />
 
         {/* SELLER DASHBOARD */}
         <Route
           path="/marketplace/seller"
-          element={<MarketplacePage />}
+          element={
+            <MarketplaceRoute>
+              <MarketplacePage />
+            </MarketplaceRoute>
+          }
         />
 
         {/* PUBLIC STORE */}
         <Route
           path="/marketplace/store/:storeId"
-          element={<MarketplaceStore />}
+          element={
+            <MarketplaceRoute>
+              <MarketplaceStore />
+            </MarketplaceRoute>
+          }
         />
 
         {/* PRODUCT PAGE */}
         <Route
           path="/marketplace/product/:productId"
           element={
-            <MarketplacePlaceholder
-              title="Product page coming next."
-            />
+            <MarketplaceRoute>
+              <MarketplacePlaceholder title="Product page coming next." />
+            </MarketplaceRoute>
           }
         />
       </Routes>
