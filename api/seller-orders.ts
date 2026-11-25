@@ -1,4 +1,3 @@
-
 import {
   initializeApp,
   getApps,
@@ -41,8 +40,7 @@ function validText(value: unknown, maxLength: number) {
   )
 }
 
-// Firestore timestamps do not survive JSON.stringify in a usable shape,
-// so send them as { seconds } which the browser code expects.
+// Convert Firestore timestamps into JSON-safe values.
 function toSeconds(value: unknown): { seconds: number } | null {
   const seconds = (value as { seconds?: unknown } | null)?.seconds
 
@@ -128,52 +126,9 @@ export default async function handler(
 
     const sellerOrderId = body.sellerOrderId
     const newStatus = body.status
-    // Seller confirms they received the customer's payment
-    // (bank transfer or cash on delivery) so fulfilment can begin.
-    if (body.action === 'confirmPayment') {
-      if (!validText(body.sellerOrderId, 150)) {
-        return res.status(400).json({
-          error: 'A valid seller order ID is required.',
-        })
-      }
 
-      const paymentRef = database
-        .collection('sellerOrders')
-        .doc(body.sellerOrderId)
-
-      await database.runTransaction(async (transaction) => {
-        const snapshot = await transaction.get(paymentRef)
-
-        if (!snapshot.exists) throw new Error('ORDER_NOT_FOUND')
-
-        const order = snapshot.data()!
-
-        if (order.sellerId !== sellerId) {
-          throw new Error('NOT_ORDER_OWNER')
-        }
-
-        if (
-          order.paymentStatus === 'Paid' ||
-          order.status !== 'Awaiting Payment'
-        ) {
-          throw new Error('ALREADY_PAID')
-        }
-
-        transaction.update(paymentRef, {
-          paymentStatus: 'Paid',
-          status: 'Awaiting Fulfilment',
-          paymentConfirmedBy: 'seller',
-          paidAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        })
-      })
-
-      return res.status(200).json({
-        success: true,
-        message: 'Payment confirmed. You can now process this order.',
-      })
-    }
-
+    // Payment confirmation is server-controlled.
+    // Sellers cannot mark an order as paid.
     const trackingNumber = body.trackingNumber || ''
     const shippingCarrier = body.shippingCarrier || ''
 
