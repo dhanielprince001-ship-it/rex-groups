@@ -7,11 +7,9 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  query,
   serverTimestamp,
   setDoc,
   updateDoc,
-  where,
 } from 'firebase/firestore'
 
 import { db } from './firebase'
@@ -30,6 +28,7 @@ import {
   Trash2,
   X,
   ImagePlus,
+  RefreshCw,
 } from 'lucide-react'
 
 type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
@@ -64,6 +63,31 @@ type ProductData = {
   imageUrl: string
   publicId: string
   status: ProductStatus
+  createdAt?: { seconds?: number }
+}
+
+type SellerOrder = {
+  id: string
+  orderId?: string
+  sellerId: string
+  customerId?: string
+  customerName?: string
+  customerEmail?: string
+  storeName?: string
+  items: {
+    productId: string
+    name: string
+    price: number
+    quantity: number
+    imageUrl?: string
+  }[]
+  subtotal: number
+  commissionAmount: number
+  sellerNetAmount: number
+  paymentStatus: string
+  status: string
+  trackingNumber?: string
+  shippingCarrier?: string
   createdAt?: { seconds?: number }
 }
 
@@ -177,6 +201,12 @@ const naira = new Intl.NumberFormat('en-NG', {
   maximumFractionDigits: 0,
 })
 
+function formatOrderDate(seconds?: number) {
+  if (!seconds) return 'Date unavailable'
+
+  return new Date(seconds * 1000).toLocaleString()
+}
+
 export default function Marketplace() {
   const { user, ready } = useAuth()
   const database = db
@@ -214,6 +244,19 @@ export default function Marketplace() {
   const [productImage, setProductImage] = useState<File | null>(null)
 
   const [savingProduct, setSavingProduct] = useState(false)
+
+  // SELLER ORDERS STATE
+  const [sellerOrders, setSellerOrders] = useState<SellerOrder[]>([])
+  const [loadingOrders, setLoadingOrders] = useState(false)
+  const [updatingOrder, setUpdatingOrder] = useState<string | null>(null)
+
+  const [trackingInputs, setTrackingInputs] = useState<
+    Record<string, string>
+  >({})
+
+  const [carrierInputs, setCarrierInputs] = useState<
+    Record<string, string>
+  >({})
 
   // MESSAGES
   const [message, setMessage] = useState('')
@@ -340,6 +383,123 @@ export default function Marketplace() {
 
     return () => unsubscribe()
   }, [uid, ready, hasStore, database])
+
+  // LOAD SELLER ORDERS
+  async function loadSellerOrders() {
+    if (!user || store?.status !== 'Approved') {
+      setSellerOrders([])
+      return
+    }
+
+    setLoadingOrders(true)
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/seller-orders', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to load orders.')
+      }
+
+      setSellerOrders(
+        Array.isArray(data.orders) ? data.orders : []
+      )
+    } catch (err) {
+      console.error('Seller orders loading error:', err)
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load your orders.'
+      )
+    } finally {
+      setLoadingOrders(false)
+    }
+  }
+
+  // AUTOMATICALLY LOAD ORDERS WHEN STORE IS APPROVED
+  useEffect(() => {
+    if (store?.status === 'Approved' && user) {
+      void loadSellerOrders()
+    } else {
+      setSellerOrders([])
+    }
+  }, [user, store?.status])
+
+  // UPDATE SELLER ORDER
+  async function updateSellerOrder(
+    order: SellerOrder,
+    status: 'Processing' | 'Shipped' | 'Delivered'
+  ) {
+    if (!user) {
+      setError('Please sign in again.')
+      return
+    }
+
+    if (order.paymentStatus !== 'Paid') {
+      setError('This order cannot be updated until payment is confirmed.')
+      return
+    }
+
+    const trackingNumber = trackingInputs[order.id] || ''
+    const shippingCarrier = carrierInputs[order.id] || ''
+
+    if (status === 'Shipped' && !trackingNumber.trim()) {
+      setError('Enter a tracking number before shipping this order.')
+      return
+    }
+
+    setUpdatingOrder(order.id)
+    setError('')
+    setMessage('')
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/seller-orders', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sellerOrderId: order.id,
+          status,
+          trackingNumber,
+          shippingCarrier,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to update this order.')
+      }
+
+      setMessage(data.message || 'Order updated successfully.')
+
+      await loadSellerOrders()
+    } catch (err) {
+      console.error('Order update error:', err)
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to update this order.'
+      )
+    } finally {
+      setUpdatingOrder(null)
+    }
+  }
 
   // RESET PRODUCT FORM
   function resetProductForm() {
@@ -741,7 +901,7 @@ export default function Marketplace() {
                 'Your application is waiting for admin approval.'}
 
               {store.status === 'Approved' &&
-                'Your store is approved. You can now manage products.'}
+                'Your store is approved. You can now manage products and orders.'}
 
               {store.status === 'Rejected' &&
                 'Your application was rejected. Contact Rex Groups for assistance.'}
@@ -973,9 +1133,257 @@ export default function Marketplace() {
         )}
       </form>
 
-      {/* PRODUCT MANAGEMENT */}
+      {/* APPROVED SELLER DASHBOARD */}
       {store?.status === 'Approved' && (
         <div className="seller-products">
+
+          {/* MY ORDERS */}
+          <div className="seller-orders-section">
+            <div className="seller-orders-heading">
+              <div>
+                <span className="marketplace-eyebrow">
+                  SELLER DASHBOARD
+                </span>
+
+                <h3>My Orders</h3>
+
+                <p>
+                  View customer purchases and manage order fulfilment.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="marketplace-button"
+                onClick={() => void loadSellerOrders()}
+                disabled={loadingOrders}
+              >
+                {loadingOrders ? (
+                  <Loader2 className="marketplace-spinner" size={18} />
+                ) : (
+                  <RefreshCw size={18} />
+                )}
+                Refresh
+              </button>
+            </div>
+
+            {loadingOrders ? (
+              <div className="marketplace-loading">
+                <Loader2 className="marketplace-spinner" size={24} />
+                <p>Loading your orders...</p>
+              </div>
+            ) : sellerOrders.length === 0 ? (
+              <div className="seller-empty-products">
+                <Package size={38} />
+                <h4>No orders yet</h4>
+                <p>
+                  Customer purchases from your store will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="seller-orders-list">
+                {sellerOrders.map((order) => (
+                  <article className="seller-order-card" key={order.id}>
+                    <div className="seller-order-top">
+                      <div>
+                        <span className="marketplace-eyebrow">
+                          ORDER REFERENCE
+                        </span>
+
+                        <h4>{order.id}</h4>
+
+                        <p>
+                          {formatOrderDate(order.createdAt?.seconds)}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`product-status ${
+                          order.paymentStatus === 'Paid'
+                            ? 'approved'
+                            : 'pending'
+                        }`}
+                      >
+                        {order.paymentStatus || 'Unpaid'}
+                      </span>
+                    </div>
+
+                    <div className="seller-order-customer">
+                      <strong>Customer information</strong>
+
+                      <p>{order.customerName || 'Customer'}</p>
+                      <p>{order.customerEmail || 'Email unavailable'}</p>
+                    </div>
+
+                    <div className="seller-order-items">
+                      <strong>Products ordered</strong>
+
+                      {order.items?.map((item, index) => (
+                        <div
+                          className="seller-order-item"
+                          key={`${item.productId}-${index}`}
+                        >
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                            />
+                          )}
+
+                          <div>
+                            <strong>{item.name}</strong>
+                            <p>Quantity: {item.quantity}</p>
+                            <p>{naira.format(item.price)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="seller-order-financials">
+                      <div>
+                        <span>Order subtotal</span>
+                        <strong>
+                          {naira.format(order.subtotal || 0)}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>Rex Groups commission</span>
+                        <strong>
+                          {naira.format(order.commissionAmount || 0)}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>Your earnings before other fees</span>
+                        <strong>
+                          {naira.format(order.sellerNetAmount || 0)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="seller-order-status">
+                      <strong>Fulfilment status</strong>
+
+                      <span className="product-status pending">
+                        {order.status || 'Awaiting Payment'}
+                      </span>
+                    </div>
+
+                    {order.trackingNumber && (
+                      <div className="seller-order-tracking">
+                        <p>
+                          Tracking number:{' '}
+                          <strong>{order.trackingNumber}</strong>
+                        </p>
+
+                        {order.shippingCarrier && (
+                          <p>
+                            Carrier:{' '}
+                            <strong>{order.shippingCarrier}</strong>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {order.paymentStatus === 'Paid' && (
+                      <div className="seller-order-actions">
+                        {order.status === 'Awaiting Fulfilment' && (
+                          <button
+                            type="button"
+                            className="marketplace-button"
+                            onClick={() =>
+                              void updateSellerOrder(order, 'Processing')
+                            }
+                            disabled={updatingOrder === order.id}
+                          >
+                            {updatingOrder === order.id
+                              ? 'Updating...'
+                              : 'Start Processing'}
+                          </button>
+                        )}
+
+                        {order.status === 'Processing' && (
+                          <>
+                            <label>
+                              Tracking Number
+                              <input
+                                value={trackingInputs[order.id] || ''}
+                                onChange={(e) =>
+                                  setTrackingInputs((current) => ({
+                                    ...current,
+                                    [order.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Enter tracking number"
+                              />
+                            </label>
+
+                            <label>
+                              Shipping Carrier
+                              <input
+                                value={carrierInputs[order.id] || ''}
+                                onChange={(e) =>
+                                  setCarrierInputs((current) => ({
+                                    ...current,
+                                    [order.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Enter delivery company"
+                              />
+                            </label>
+
+                            <button
+                              type="button"
+                              className="marketplace-button"
+                              onClick={() =>
+                                void updateSellerOrder(order, 'Shipped')
+                              }
+                              disabled={updatingOrder === order.id}
+                            >
+                              {updatingOrder === order.id
+                                ? 'Updating...'
+                                : 'Mark as Shipped'}
+                            </button>
+                          </>
+                        )}
+
+                        {order.status === 'Shipped' && (
+                          <button
+                            type="button"
+                            className="marketplace-button"
+                            onClick={() =>
+                              void updateSellerOrder(order, 'Delivered')
+                            }
+                            disabled={updatingOrder === order.id}
+                          >
+                            {updatingOrder === order.id
+                              ? 'Updating...'
+                              : 'Mark as Delivered'}
+                          </button>
+                        )}
+
+                        {order.status === 'Delivered' && (
+                          <p className="seller-order-complete">
+                            Order delivered successfully.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {order.paymentStatus !== 'Paid' && (
+                      <p className="seller-order-payment-notice">
+                        Fulfilment actions will become available after
+                        payment has been verified.
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* PRODUCT MANAGEMENT HEADING */}
           <div className="seller-products-heading">
             <div>
               <span className="marketplace-eyebrow">
@@ -1211,7 +1619,7 @@ export default function Marketplace() {
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteProduct(product)}
+                          onClick={() => void handleDeleteProduct(product)}
                         >
                           <Trash2 size={16} />
                           Delete
