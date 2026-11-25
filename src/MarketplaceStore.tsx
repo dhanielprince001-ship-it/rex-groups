@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   collection,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 
 import { db } from './firebase'
+import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
 
 type StoreData = {
@@ -49,6 +50,144 @@ const money = new Intl.NumberFormat('en-NG', {
   currency: 'NGN',
   maximumFractionDigits: 0,
 })
+
+function AskSeller({
+  store,
+  products,
+}: {
+  store: StoreData
+  products: ProductData[]
+}) {
+  const { user, ready } = useAuth()
+
+  const [productId, setProductId] = useState('')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [sent, setSent] = useState(false)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+
+    if (!user) return
+
+    if (message.trim().length < 10) {
+      setError('Please write at least 10 characters.')
+      return
+    }
+
+    setSending(true)
+    setError('')
+    setSent(false)
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/seller-enquiries', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeId: store.id,
+          productId,
+          message,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to send your enquiry.')
+      }
+
+      setMessage('')
+      setProductId('')
+      setSent(true)
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to send your enquiry.',
+      )
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // Sellers cannot enquire to their own store.
+  if (!ready || user?.uid === store.id) return null
+
+  return (
+    <section className="rex-market-section rex-ask-seller" id="ask-seller">
+      <div className="rex-market-section-heading">
+        <div>
+          <span className="rex-market-eyebrow">HAVE A QUESTION?</span>
+          <h2>Ask <em>{store.name}.</em></h2>
+          <p>Send a message to the seller. Their reply appears in My orders.</p>
+        </div>
+      </div>
+
+      {!user ? (
+        <Link
+          className="rex-market-primary-link"
+          to={`/?returnTo=${encodeURIComponent(`/marketplace/store/${store.id}`)}#account`}
+        >
+          Sign in to message this store
+        </Link>
+      ) : (
+        <form className="rex-ask-form" onSubmit={handleSubmit}>
+          <label htmlFor="ask-product">About a product (optional)</label>
+          <select
+            id="ask-product"
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            disabled={sending}
+          >
+            <option value="">General question</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+
+          <label htmlFor="ask-message">Your message</label>
+          <textarea
+            id="ask-message"
+            rows={4}
+            maxLength={1000}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Ask about sizes, availability, delivery..."
+            disabled={sending}
+            required
+          />
+
+          {error && (
+            <p className="rex-ask-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          {sent && (
+            <p className="rex-ask-success" role="status">
+              Your enquiry was sent.{' '}
+              <Link to="/marketplace/orders">See replies in My orders</Link>
+            </p>
+          )}
+
+          <button
+            className="rex-market-primary-link"
+            type="submit"
+            disabled={sending}
+          >
+            {sending ? 'Sending...' : 'Send enquiry'}
+          </button>
+        </form>
+      )}
+    </section>
+  )
+}
 
 export default function MarketplaceStore() {
   const { storeId } = useParams()
@@ -208,6 +347,7 @@ export default function MarketplaceStore() {
 
         <nav className="rex-market-nav">
           <Link to="/marketplace">Marketplace</Link>
+          <Link to="/marketplace/orders">My orders</Link>
           <Link to="/marketplace/cart">
             <ShoppingBag size={17} /> Cart
           </Link>
@@ -332,6 +472,8 @@ export default function MarketplaceStore() {
             </div>
           )}
         </section>
+
+        <AskSeller store={store} products={products} />
 
         <section className="rex-store-bottom-link">
           <Link to="/marketplace">
