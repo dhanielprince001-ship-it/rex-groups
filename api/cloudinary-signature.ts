@@ -43,15 +43,14 @@ export default async function handler(
     }
 
     const idToken = authorization.slice(7)
-
     const app = getFirebaseAdmin()
+
     const decodedToken = await getAuth(app).verifyIdToken(idToken)
 
-    const storeRef = getFirestore(app)
+    const storeSnapshot = await getFirestore(app)
       .collection('stores')
       .doc(decodedToken.uid)
-
-    const storeSnapshot = await storeRef.get()
+      .get()
 
     if (!storeSnapshot.exists) {
       return res.status(403).json({
@@ -66,7 +65,7 @@ export default async function handler(
       store?.status !== 'Approved'
     ) {
       return res.status(403).json({
-        error: 'Only approved store owners can upload products'
+        error: 'Approved store required'
       })
     }
 
@@ -87,19 +86,23 @@ export default async function handler(
     })
 
     const timestamp = Math.floor(Date.now() / 1000)
+    const folder = `rexgroups/products/${decodedToken.uid}`
+
+    const uploadParameters = {
+      timestamp,
+      upload_preset: 'rexgroups_products',
+      folder
+    }
 
     const signature = cloudinary.utils.api_sign_request(
-      {
-        timestamp,
-        upload_preset: 'rexgroups_products',
-        folder: 'rexgroups/products'
-      },
+      uploadParameters,
       apiSecret
     )
 
     return res.status(200).json({
       timestamp,
       signature,
+      folder,
       cloudName,
       apiKey,
       uploadPreset: 'rexgroups_products'
