@@ -1,5 +1,6 @@
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -128,8 +129,9 @@ async function uploadImage(
     body: JSON.stringify({ purpose }),
   })
 
-  const signatureData =
-    await signatureResponse.json() as UploadSignature
+  const signatureData = (await signatureResponse
+    .json()
+    .catch(() => ({}))) as UploadSignature
 
   if (!signatureResponse.ok) {
     throw new Error(
@@ -154,10 +156,11 @@ async function uploadImage(
     }
   )
 
-  const uploadData =
-    await uploadResponse.json() as CloudinaryResult & {
-      error?: { message?: string }
-    }
+  const uploadData = (await uploadResponse
+    .json()
+    .catch(() => ({}))) as CloudinaryResult & {
+    error?: { message?: string }
+  }
 
   if (!uploadResponse.ok) {
     throw new Error(
@@ -167,6 +170,12 @@ async function uploadImage(
 
   return uploadData
 }
+
+const naira = new Intl.NumberFormat('en-NG', {
+  style: 'currency',
+  currency: 'NGN',
+  maximumFractionDigits: 0,
+})
 
 export default function Marketplace() {
   const { user, ready } = useAuth()
@@ -214,6 +223,24 @@ export default function Marketplace() {
     store?.status === 'Rejected' ||
     store?.status === 'Suspended'
 
+  const uid = user?.uid
+  const hasStore = store !== null
+
+  // Fill the store form once per subscription so live updates
+  // (e.g. an admin approval) never overwrite what the seller is typing.
+  const formSyncedRef = useRef(false)
+  const feedbackRef = useRef<HTMLDivElement | null>(null)
+
+  // Bring success / error messages into view
+  useEffect(() => {
+    if (message || error) {
+      feedbackRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  }, [message, error])
+
   // LOAD STORE
   useEffect(() => {
     if (!ready) return
@@ -231,23 +258,33 @@ export default function Marketplace() {
     const unsubscribe = onSnapshot(
       storeRef,
       (snapshot) => {
+        const firstSnapshot = !formSyncedRef.current
+
         if (snapshot.exists()) {
           const data = snapshot.data() as StoreData
 
           setStore(data)
-          setStoreName(data.name || '')
-          setStoreDescription(data.description || '')
-          setStoreCategory(data.category || 'Other')
 
-          setStorePhone(data.phone || '')
-          setStoreWhatsapp(data.whatsapp || '')
-          setStoreEmail(data.email || user.email || '')
-          setStoreLocation(data.location || '')
-          setStoreSocialLink(data.socialLink || '')
+          if (firstSnapshot) {
+            setStoreName(data.name || '')
+            setStoreDescription(data.description || '')
+            setStoreCategory(data.category || 'Other')
+
+            setStorePhone(data.phone || '')
+            setStoreWhatsapp(data.whatsapp || '')
+            setStoreEmail(data.email || user.email || '')
+            setStoreLocation(data.location || '')
+            setStoreSocialLink(data.socialLink || '')
+          }
         } else {
           setStore(null)
-          setStoreEmail(user.email || '')
+
+          if (firstSnapshot) {
+            setStoreEmail(user.email || '')
+          }
         }
+
+        formSyncedRef.current = true
 
         setLoadingStore(false)
       },
@@ -258,14 +295,17 @@ export default function Marketplace() {
       }
     )
 
-    return () => unsubscribe()
+    return () => {
+      formSyncedRef.current = false
+      unsubscribe()
+    }
   }, [user, ready, database])
 
   // LOAD SELLER PRODUCTS
   useEffect(() => {
     if (!ready) return
 
-    if (!user || !database || !store) {
+    if (!uid || !database || !hasStore) {
       setProducts([])
       setLoadingProducts(false)
       return
@@ -275,7 +315,7 @@ export default function Marketplace() {
 
     const productsQuery = query(
       collection(database, 'products'),
-      where('ownerId', '==', user.uid)
+      where('ownerId', '==', uid)
     )
 
     const unsubscribe = onSnapshot(
@@ -303,7 +343,7 @@ export default function Marketplace() {
     )
 
     return () => unsubscribe()
-  }, [user, ready, store, database])
+  }, [uid, ready, hasStore, database])
 
   // RESET PRODUCT FORM
   function resetProductForm() {
@@ -537,6 +577,12 @@ export default function Marketplace() {
         (item) => item.id === editingProductId
       )
 
+      if (editingProductId && !existingProduct) {
+        throw new Error(
+          'This product could not be found. Refresh the page and try again.'
+        )
+      }
+
       if (productImage) {
         const token = await user.getIdToken()
 
@@ -657,9 +703,9 @@ export default function Marketplace() {
             Sign in to your Rex Groups account before applying
             to become a marketplace seller.
           </p>
-          <a href="#account" className="marketplace-button">
+          <Link to="/#account" className="marketplace-button">
             Sign In or Register
-          </a>
+          </Link>
         </div>
       </section>
     )
@@ -673,9 +719,9 @@ export default function Marketplace() {
           REX GROUPS MARKETPLACE
         </span>
 
-        <h2>
+        <h1>
           {store ? 'Manage Your Store' : 'Create Your Online Store'}
-        </h2>
+        </h1>
 
         <p>
           Build your online business and reach customers
@@ -713,6 +759,23 @@ export default function Marketplace() {
           </div>
         </div>
       )}
+
+      {/* FEEDBACK (shown once, scrolled into view) */}
+      <div ref={feedbackRef}>
+        {error && (
+          <div className="marketplace-error" role="alert">
+            <AlertCircle size={18} />
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="marketplace-success" role="status">
+            <CheckCircle2 size={18} />
+            {message}
+          </div>
+        )}
+      </div>
 
       {/* STORE FORM */}
       <form
@@ -1096,21 +1159,6 @@ export default function Marketplace() {
             </form>
           )}
 
-          {/* PRODUCT MESSAGES */}
-          {error && (
-            <div className="marketplace-error">
-              <AlertCircle size={18} />
-              {error}
-            </div>
-          )}
-
-          {message && (
-            <div className="marketplace-success">
-              <CheckCircle2 size={18} />
-              {message}
-            </div>
-          )}
-
           {/* PRODUCT LIST */}
           <div className="seller-product-list">
             <h3>Your Products ({products.length})</h3>
@@ -1157,11 +1205,7 @@ export default function Marketplace() {
                       </p>
 
                       <strong className="seller-product-price">
-                        {new Intl.NumberFormat('en-NG', {
-                          style: 'currency',
-                          currency: 'NGN',
-                          maximumFractionDigits: 0,
-                        }).format(product.price)}
+                        {naira.format(product.price)}
                       </strong>
 
                       <div className="seller-product-actions">
@@ -1187,21 +1231,6 @@ export default function Marketplace() {
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* STORE APPLICATION MESSAGES */}
-      {error && !showProductForm && (
-        <div className="marketplace-error">
-          <AlertCircle size={18} />
-          {error}
-        </div>
-      )}
-
-      {message && !showProductForm && (
-        <div className="marketplace-success">
-          <CheckCircle2 size={18} />
-          {message}
         </div>
       )}
 
