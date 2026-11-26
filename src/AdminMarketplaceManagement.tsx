@@ -43,6 +43,7 @@ type Payload = {
   transactions: Row[]
   refunds: Row[]
   disputes: Row[]
+  sellerVerifications: Row[]
   settings: { commissionPercent: number }[]
 }
 
@@ -71,8 +72,11 @@ export default function AdminMarketplaceManagement() {
     transactions: [],
     refunds: [],
     disputes: [],
+    sellerVerifications: [],
     settings: [{ commissionPercent: 10 }],
   })
+
+  const [requireVerified, setRequireVerified] = useState(false)
 
   const [commission, setCommission] = useState('10')
   const [loading, setLoading] = useState(true)
@@ -81,7 +85,13 @@ export default function AdminMarketplaceManagement() {
   const [success, setSuccess] = useState('')
 
   const [tab, setTab] = useState<
-    'overview' | 'sellers' | 'orders' | 'transactions' | 'cases'
+    | 'overview'
+    | 'sellers'
+    | 'verification'
+    | 'orders'
+    | 'payouts'
+    | 'transactions'
+    | 'cases'
   >('overview')
 
   const request = useCallback(
@@ -125,6 +135,19 @@ export default function AdminMarketplaceManagement() {
     try {
       const result = (await request('GET')) as Payload
 
+      // The server sends settings as one object; older code expected a list.
+      const rawSettings = result.settings as unknown
+      const settingsObject = (
+        Array.isArray(rawSettings) ? rawSettings[0] : rawSettings
+      ) as
+        | { commissionPercent?: number; requireVerifiedSellers?: boolean }
+        | undefined
+
+      const savedCommission =
+        typeof settingsObject?.commissionPercent === 'number'
+          ? settingsObject.commissionPercent
+          : 10
+
       setData({
         stores: result.stores || [],
         profiles: result.profiles || [],
@@ -133,12 +156,13 @@ export default function AdminMarketplaceManagement() {
         transactions: result.transactions || [],
         refunds: result.refunds || [],
         disputes: result.disputes || [],
-        settings: result.settings || [{ commissionPercent: 10 }],
+        sellerVerifications: result.sellerVerifications || [],
+        settings: [{ commissionPercent: savedCommission }],
       })
 
-      setCommission(
-        String(result.settings?.[0]?.commissionPercent ?? 10),
-      )
+      setRequireVerified(settingsObject?.requireVerifiedSellers === true)
+
+      setCommission(String(savedCommission))
     } catch (err) {
       setError(
         err instanceof Error
@@ -314,7 +338,9 @@ export default function AdminMarketplaceManagement() {
           [
             'overview',
             'sellers',
+            'verification',
             'orders',
+            'payouts',
             'transactions',
             'cases',
           ] as const
@@ -648,6 +674,366 @@ export default function AdminMarketplaceManagement() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {tab === 'verification' && (
+        <div className="admin-market-table-wrap">
+          <h4>Seller verification</h4>
+
+          <label className="admin-market-require">
+            <input
+              type="checkbox"
+              checked={requireVerified}
+              disabled={!!busy}
+              onChange={(event) =>
+                void action('require-verified', {
+                  action: 'set-require-verified',
+                  value: event.target.checked,
+                })
+              }
+            />
+            Only verified sellers can receive orders
+          </label>
+
+          <p className="admin-market-note">
+            Approve a seller after the bank account name matches their
+            legal name. Verified stores get a badge, and their bank
+            details appear in the Payouts tab.
+          </p>
+
+          {data.sellerVerifications.length === 0 ? (
+            <p>No sellers have submitted verification yet.</p>
+          ) : (
+            <table className="admin-market-table">
+              <thead>
+                <tr>
+                  <th>Store</th>
+                  <th>Legal name</th>
+                  <th>Bank account</th>
+                  <th>Name check</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {[...data.sellerVerifications]
+                  .sort((a, b) =>
+                    a.status === 'Pending Review' ? -1 : b.status === 'Pending Review' ? 1 : 0,
+                  )
+                  .map((item) => {
+                    const store = data.stores.find(
+                      (entry) => entry.id === item.id,
+                    )
+
+                    return (
+                      <tr key={item.id}>
+                        <td>{store?.name || item.id}</td>
+                        <td>
+                          {item.legalName}
+                          <small style={{ display: 'block', opacity: 0.7 }}>
+                            {item.phone}
+                            {item.businessRegNumber
+                              ? ` · Reg: ${item.businessRegNumber}`
+                              : ''}
+                          </small>
+                        </td>
+                        <td>
+                          {item.bankName}
+                          <small style={{ display: 'block', opacity: 0.7 }}>
+                            {item.accountNumber}
+                          </small>
+                        </td>
+                        <td>
+                          {item.nameChecked
+                            ? `Bank says: ${item.accountName}`
+                            : 'Not checked automatically. Check the account name yourself.'}
+                        </td>
+                        <td>
+                          {item.status}
+                          {item.rejectionReason
+                            ? ` · ${item.rejectionReason}`
+                            : ''}
+                        </td>
+                        <td>
+                          <div className="admin-market-row-actions">
+                            {item.status !== 'Verified' && (
+                              <button
+                                disabled={!!busy}
+                                onClick={() =>
+                                  void action(item.id, {
+                                    action: 'verification-review',
+                                    storeId: item.id,
+                                    decision: 'approve',
+                                  })
+                                }
+                              >
+                                Approve
+                              </button>
+                            )}
+
+                            {item.status !== 'Rejected' && (
+                              <button
+                                disabled={!!busy}
+                                onClick={() => {
+                                  const reason = window.prompt(
+                                    item.status === 'Verified'
+                                      ? 'Reason for removing verification:'
+                                      : 'Reason for rejecting:',
+                                  )
+
+                                  if (reason && reason.trim().length >= 3) {
+                                    void action(item.id, {
+                                      action: 'verification-review',
+                                      storeId: item.id,
+                                      decision:
+                                        item.status === 'Verified'
+                                          ? 'revoke'
+                                          : 'reject',
+                                      reason,
+                                    })
+                                  }
+                                }}
+                              >
+                                {item.status === 'Verified' ? 'Revoke' : 'Reject'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'payouts' && (
+        <div className="admin-market-table-wrap">
+          <h4>Seller payouts</h4>
+
+          <p className="admin-market-note">
+            Customer money is held until the buyer confirms receipt (or{' '}
+            4 days after the seller marks the order delivered). Pay
+            sellers from your Paystack balance once an order is
+            &ldquo;Released&rdquo;, then mark it as paid out here.
+          </p>
+
+          {(() => {
+            const paid = data.sellerOrders.filter(
+              (order) => order.paymentStatus === 'Paid',
+            )
+
+            const state = (order: Row) => order.payoutStatus || 'Held'
+
+            const amount = (order: Row) =>
+              number(order.payoutAmount) || number(order.sellerNetAmount)
+
+            const total = (status: string) =>
+              paid
+                .filter((order) => state(order) === status)
+                .reduce((sum, order) => sum + amount(order), 0)
+
+            const rank: Record<string, number> = {
+              Disputed: 0,
+              Released: 1,
+              Held: 2,
+              'Paid Out': 3,
+              Cancelled: 4,
+            }
+
+            const rows = [...paid].sort(
+              (a, b) =>
+                (rank[state(a)] ?? 9) - (rank[state(b)] ?? 9) ||
+                number(b.createdAt?.seconds) - number(a.createdAt?.seconds),
+            )
+
+            if (rows.length === 0) {
+              return <p>No paid seller orders yet.</p>
+            }
+
+            return (
+              <>
+                <p>
+                  <strong>Ready to pay out:</strong>{' '}
+                  {money.format(total('Released'))} ·{' '}
+                  <strong>Held:</strong> {money.format(total('Held'))} ·{' '}
+                  <strong>Disputed:</strong>{' '}
+                  {money.format(total('Disputed'))}
+                </p>
+
+                <table className="admin-market-table">
+                  <thead>
+                    <tr>
+                      <th>Store</th>
+                      <th>Pay to</th>
+                      <th>Order</th>
+                      <th>Payout</th>
+                      <th>Delivery</th>
+                      <th>Payout status</th>
+                      <th>Details</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {rows.map((order) => {
+                      const status = state(order)
+
+                      return (
+                        <tr key={order.id}>
+                          <td>{order.storeName || '—'}</td>
+                          <td>
+                            {(() => {
+                              const bank = data.sellerVerifications.find(
+                                (entry) => entry.id === order.sellerId,
+                              )
+
+                              if (!bank) return 'No bank details yet'
+
+                              return (
+                                <>
+                                  {bank.bankName} {bank.accountNumber}
+                                  <small style={{ display: 'block', opacity: 0.7 }}>
+                                    {bank.accountName || bank.legalName}
+                                    {bank.status === 'Verified'
+                                      ? ' · Verified'
+                                      : ' · Not verified'}
+                                  </small>
+                                </>
+                              )
+                            })()}
+                          </td>
+                          <td>{order.orderId || order.id}</td>
+                          <td>{money.format(amount(order))}</td>
+                          <td>{order.status || '—'}</td>
+                          <td>{status}</td>
+
+                          <td>
+                            {status === 'Disputed' &&
+                              (order.disputeReason || 'Buyer reported a problem')}
+
+                            {status === 'Held' && order.autoReleaseAt?.seconds
+                              ? `Auto-releases ${dateText(order.autoReleaseAt)}`
+                              : null}
+
+                            {status === 'Released' &&
+                              `${order.payoutReleaseReason || 'Released'} · ${dateText(order.payoutReleasedAt)}`}
+
+                            {status === 'Paid Out' &&
+                              `${dateText(order.payoutPaidAt)}${order.payoutReference ? ` · ${order.payoutReference}` : ''}`}
+                          </td>
+
+                          <td>
+                            <div className="admin-market-row-actions">
+                              {(status === 'Held' || status === 'Disputed') && (
+                                <button
+                                  disabled={!!busy}
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        'Release this money to the seller now?',
+                                      )
+                                    ) {
+                                      void action(order.id, {
+                                        action: 'payout',
+                                        operation: 'release',
+                                        sellerOrderId: order.id,
+                                      })
+                                    }
+                                  }}
+                                >
+                                  Release
+                                </button>
+                              )}
+
+                              {status === 'Released' && (
+                                <>
+                                  <button
+                                    disabled={!!busy}
+                                    onClick={() => {
+                                      const reference = window.prompt(
+                                        'Transfer reference (optional):',
+                                        '',
+                                      )
+
+                                      if (reference !== null) {
+                                        void action(order.id, {
+                                          action: 'payout',
+                                          operation: 'mark-paid',
+                                          sellerOrderId: order.id,
+                                          reference,
+                                        })
+                                      }
+                                    }}
+                                  >
+                                    Mark paid out
+                                  </button>
+
+                                  <button
+                                    disabled={!!busy}
+                                    onClick={() =>
+                                      void action(order.id, {
+                                        action: 'payout',
+                                        operation: 'hold',
+                                        sellerOrderId: order.id,
+                                      })
+                                    }
+                                  >
+                                    Hold
+                                  </button>
+                                </>
+                              )}
+
+                              {status === 'Disputed' && (
+                                <button
+                                  disabled={!!busy}
+                                  onClick={() =>
+                                    void action(order.id, {
+                                      action: 'payout',
+                                      operation: 'hold',
+                                      sellerOrderId: order.id,
+                                    })
+                                  }
+                                >
+                                  Keep held
+                                </button>
+                              )}
+
+                              {(status === 'Held' ||
+                                status === 'Disputed' ||
+                                status === 'Released') && (
+                                <button
+                                  disabled={!!busy}
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        'Cancel this payout because the buyer is being refunded? The seller will not be paid.',
+                                      )
+                                    ) {
+                                      void action(order.id, {
+                                        action: 'payout',
+                                        operation: 'cancel',
+                                        sellerOrderId: order.id,
+                                      })
+                                    }
+                                  }}
+                                >
+                                  Cancel (refund buyer)
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )
+          })()}
         </div>
       )}
 
