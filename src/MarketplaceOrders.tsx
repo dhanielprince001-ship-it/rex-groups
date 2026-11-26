@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 
 import { useAuth } from './AuthPanel'
+import ThemeToggle from './ThemeToggle'
 
 type Seconds = { seconds?: number } | null
 
@@ -129,6 +130,8 @@ function Header({ right }: { right: ReactNode }) {
       </Link>
 
       {right}
+
+      <ThemeToggle />
     </header>
   )
 }
