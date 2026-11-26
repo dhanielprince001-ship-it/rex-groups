@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { v2 as cloudinary } from 'cloudinary'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
@@ -98,6 +99,45 @@ async function releaseDuePayouts(db: FirebaseFirestore.Firestore) {
   }
 
   return released
+}
+
+// Best-effort removal of images from Cloudinary. Never throws: the store is
+// already deleted by the time this runs, so a failure here is only reported.
+async function deleteCloudinaryImages(publicIds: string[]) {
+  const ids = [...new Set(publicIds.filter((id) => typeof id === 'string' && id.trim()))]
+
+  if (ids.length === 0) return { deleted: 0, failed: 0 }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME
+  const apiKey = process.env.CLOUDINARY_API_KEY
+  const apiSecret = process.env.CLOUDINARY_API_SECRET
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    return { deleted: 0, failed: ids.length }
+  }
+
+  cloudinary.config({ cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret })
+
+  let deleted = 0
+  let failed = 0
+
+  // The Cloudinary Admin API accepts up to 100 ids per request.
+  for (let index = 0; index < ids.length; index += 100) {
+    const chunk = ids.slice(index, index + 100)
+
+    try {
+      const result = await cloudinary.api.delete_resources(chunk, { invalidate: true })
+      const outcomes = Object.values(result.deleted || {}) as string[]
+
+      deleted += outcomes.filter((value) => value === 'deleted').length
+      failed += chunk.length - outcomes.filter((value) => value === 'deleted' || value === 'not_found').length
+    } catch (error) {
+      console.error('Cloudinary cleanup failed:', error)
+      failed += chunk.length
+    }
+  }
+
+  return { deleted, failed }
 }
 
 function sendError(
@@ -391,6 +431,14 @@ export default async function handler(
           db.collection('storeRatings').where('storeId', '==', storeId).limit(450).get(),
         ])
 
+        // Collect image ids before the records are gone.
+        const storeData = storeSnap.data() || {}
+        const imageIds: string[] = [
+          storeData.logoPublicId,
+          storeData.coverPublicId,
+          ...products.docs.map((item) => item.data().publicId),
+        ].filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+
         const batch = db.batch()
 
         products.docs.forEach((item) => batch.delete(item.ref))
@@ -400,11 +448,19 @@ export default async function handler(
 
         await batch.commit()
 
+        const images = await deleteCloudinaryImages(imageIds)
+
         await audit('store-delete', storeId, storeName, reason || 'Deleted permanently', {
           productsDeleted: products.size,
+          imagesDeleted: images.deleted,
+          imagesFailed: images.failed,
         })
 
-        return res.status(200).json({ success: true })
+        return res.status(200).json({
+          success: true,
+          imagesDeleted: images.deleted,
+          imagesFailed: images.failed,
+        })
       }
 
       if (action === 'set-require-verified') {
