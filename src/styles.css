@@ -6672,3 +6672,160 @@ html[data-theme=dark] .rex-marketplace {
     width: calc(100% - 32px);
   }
 }
+
+
+/* =====================================
+   BUYER PROTECTION / HELD PAYOUTS
+===================================== */
+
+.rex-receipt {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--rm-line);
+  border-radius: 10px;
+  background: var(--rm-soft);
+}
+
+.rex-receipt p {
+  margin: 0;
+  color: var(--rm-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.rex-receipt textarea {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--rm-line);
+  border-radius: 9px;
+  background: var(--rm-paper);
+  color: var(--rm-ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.rex-receipt-warn {
+  border-color: var(--rm-warn);
+}
+
+.rex-receipt-done strong {
+  color: var(--rm-ok);
+}
+
+.rex-receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rex-receipt-report {
+  padding: 10px 16px;
+  border: 1px solid var(--rm-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--rm-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seller-payout {
+  display: grid;
+  gap: 4px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.seller-payout span {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+
+/* =====================================
+   SELLER VERIFICATION
+===================================== */
+
+.rex-verified-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--rm-soft, var(--surface2));
+  color: var(--rm-accent-ink, var(--accentInk));
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rex-market-store-info .rex-verified-badge {
+  margin-top: 8px;
+}
+
+.seller-verify {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.seller-verify p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.seller-verify .seller-verify-ok {
+  color: var(--accentInk);
+}
+
+.seller-verify-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seller-verify-head h3 {
+  margin: 0;
+}
+
+.seller-verify-form {
+  display: grid;
+  gap: 12px;
+}
+
+.seller-verify-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.seller-verify-form input,
+.seller-verify-form select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.admin-market-require {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  font-weight: 600;
+}
