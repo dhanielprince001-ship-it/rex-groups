@@ -1,12 +1,13 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import {
-  addDoc,
   collection,
+  doc,
   onSnapshot,
   query,
   serverTimestamp,
   where,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { Star, MessageSquare, Send } from 'lucide-react'
@@ -95,14 +96,26 @@ export default function Reviews() {
       setLoading(true)
       setMessage('')
 
-      await addDoc(collection(db, 'reviews'), {
+      // The email is kept in a separate admin-only document so it is never
+      // exposed through the publicly readable reviews collection.
+      const reviewRef = doc(collection(db, 'reviews'))
+      const contactRef = doc(db, 'reviewContacts', reviewRef.id)
+      const batch = writeBatch(db)
+
+      batch.set(reviewRef, {
         name: name.trim(),
-        email: email.trim(),
         rating,
         comment: comment.trim(),
         status: 'Pending',
         createdAt: serverTimestamp(),
       })
+
+      batch.set(contactRef, {
+        email: email.trim(),
+        createdAt: serverTimestamp(),
+      })
+
+      await batch.commit()
 
       setName('')
       setEmail('')
