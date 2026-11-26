@@ -1,8 +1,9 @@
-
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react'
@@ -15,52 +16,98 @@ type ThemeContextType = {
   setTheme: (theme: Theme) => void
 }
 
+const STORAGE_KEY = 'rex-theme'
+const DARK_COLOR = '#0b0d10'
+const LIGHT_COLOR = '#f5f6f3'
+
 const ThemeContext = createContext<ThemeContextType | null>(null)
 
-function getInitialTheme(): Theme {
+function readSavedTheme(): Theme | null {
   try {
-    const saved = localStorage.getItem('rex-theme')
+    const saved = localStorage.getItem(STORAGE_KEY)
 
     if (saved === 'dark' || saved === 'light') {
       return saved
     }
   } catch {
-    // Storage unavailable
+    // Storage unavailable (private mode): fall back to the system setting.
   }
 
+  return null
+}
+
+function getSystemTheme(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: light)').matches
     ? 'light'
     : 'dark'
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
+  const [theme, setThemeState] = useState<Theme>(
+    () => readSavedTheme() ?? getSystemTheme(),
+  )
 
+  // Apply the theme to the page. Runs on every route because the provider
+  // wraps the whole app, so the marketplace pages are themed too.
   useEffect(() => {
     document.documentElement.dataset.theme = theme
 
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute(
-        'content',
-        theme === 'dark' ? '#0b0d10' : '#f5f6f3',
-      )
-
-    try {
-      localStorage.setItem('rex-theme', theme)
-    } catch {
-      // Storage unavailable
-    }
+      ?.setAttribute('content', theme === 'dark' ? DARK_COLOR : LIGHT_COLOR)
   }, [theme])
 
-  function toggleTheme() {
-    setTheme((current) => current === 'dark' ? 'light' : 'dark')
-  }
+  // Follow the device setting until the visitor makes their own choice.
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-color-scheme: light)')
+    if (!query) return
+
+    const onChange = () => {
+      if (readSavedTheme() === null) {
+        setThemeState(query.matches ? 'light' : 'dark')
+      }
+    }
+
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+
+  // Keep several open tabs in sync.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return
+
+      if (event.newValue === 'dark' || event.newValue === 'light') {
+        setThemeState(event.newValue)
+      }
+    }
+
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Only an explicit choice is remembered.
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next)
+
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      // Storage unavailable: the choice still applies for this visit.
+    }
+  }, [])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }, [theme, setTheme])
+
+  const value = useMemo(
+    () => ({ theme, toggleTheme, setTheme }),
+    [theme, toggleTheme, setTheme],
+  )
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   )
 }
 
