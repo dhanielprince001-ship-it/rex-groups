@@ -136,6 +136,11 @@ export default async function handler(
         sellerId: data.sellerId || '',
         items: Array.isArray(data.items) ? data.items : [],
         subtotal: data.subtotal || 0,
+        deliveryFee:
+          typeof data.deliveryFee === 'number'
+            ? data.deliveryFee
+            : 0,
+        deliveryLocation: data.deliveryLocation || '',
         status: data.status || 'Awaiting Payment',
         paymentStatus: data.paymentStatus || 'Unpaid',
         trackingNumber: data.trackingNumber || '',
@@ -167,6 +172,10 @@ export default async function handler(
           deliveryFee:
             typeof data.deliveryFee === 'number'
               ? data.deliveryFee
+              : null,
+          total:
+            typeof data.total === 'number'
+              ? data.total
               : null,
           currency: data.currency || 'NGN',
           status: rollUpStatus(
