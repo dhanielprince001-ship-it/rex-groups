@@ -17,12 +17,15 @@ import {
   MapPin,
   RefreshCw,
   Check,
+  Truck,
 } from 'lucide-react'
 
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
 import ThemeToggle from './ThemeToggle'
+import StoreReviews, { RatingSummary } from './StoreRatings'
+import { readZones } from './delivery'
 
 type StoreData = {
   id: string
@@ -33,6 +36,9 @@ type StoreData = {
   coverUrl?: string
   location?: string
   status: string
+  deliveryZones?: unknown
+  ratingAverage?: number
+  ratingCount?: number
 }
 
 type ProductData = {
@@ -275,6 +281,8 @@ export default function MarketplaceStore() {
     }
   }, [storeId])
 
+  const zones = readZones(store?.deliveryZones)
+
   function handleAddToCart(product: ProductData) {
     if (!store) return
 
@@ -395,6 +403,13 @@ export default function MarketplaceStore() {
                   <MapPin size={15} />
                   {store.location || 'Nigeria'}
                 </span>
+
+                <a href="#reviews" className="rex-store-rating-link">
+                  <RatingSummary
+                    average={store.ratingAverage}
+                    count={store.ratingCount}
+                  />
+                </a>
               </div>
             </div>
           </div>
@@ -476,6 +491,52 @@ export default function MarketplaceStore() {
             </div>
           )}
         </section>
+
+        <section className="rex-market-section rex-store-delivery" id="delivery">
+          <div className="rex-market-section-heading">
+            <div>
+              <span className="rex-market-eyebrow">DELIVERY</span>
+              <h2>
+                Delivery <em>prices.</em>
+              </h2>
+              <p>
+                The price for your location is added to your order at
+                checkout.
+              </p>
+            </div>
+
+            <Truck size={26} aria-hidden="true" />
+          </div>
+
+          {zones.length === 0 ? (
+            <p className="rex-reviews-note">
+              This seller has not listed delivery prices yet. Ask them
+              about delivery before you order.
+            </p>
+          ) : (
+            <ul className="rex-delivery-list">
+              {zones.map((zone) => (
+                <li key={zone.id}>
+                  <span>{zone.location}</span>
+                  <strong>
+                    {zone.fee > 0 ? money.format(zone.fee) : 'Free'}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <StoreReviews
+          storeId={store.id}
+          onChange={(average, count) =>
+            setStore((current) =>
+              current
+                ? { ...current, ratingAverage: average, ratingCount: count }
+                : current,
+            )
+          }
+        />
 
         <AskSeller store={store} products={products} />
 
