@@ -115,9 +115,52 @@ export default async function handler(
   res.setHeader('Cache-Control', 'no-store')
 
   try {
-    await verifyAdmin(req)
+    const adminToken = await verifyAdmin(req)
 
     const { db } = getFirebaseAdmin()
+
+    // A permanent record of sensitive admin actions (who, what, why).
+    const audit = (
+      action: string,
+      storeId: string,
+      storeName: string,
+      reason: string,
+      extra: Record<string, unknown> = {},
+    ) =>
+      db.collection('adminAuditLog').add({
+        action,
+        storeId,
+        storeName,
+        reason,
+        adminUid: adminToken.uid,
+        ...extra,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+
+    // Products hidden by a store removal remember their earlier status.
+    const restoreProducts = async (storeId: string) => {
+      const products = await db
+        .collection('products')
+        .where('storeId', '==', storeId)
+        .limit(500)
+        .get()
+
+      const batch = db.batch()
+
+      for (const product of products.docs) {
+        const data = product.data()
+
+        if (data.removedWithStore === true) {
+          batch.update(product.ref, {
+            status: data.statusBeforeRemoval || 'Pending',
+            removedWithStore: FieldValue.delete(),
+            statusBeforeRemoval: FieldValue.delete(),
+          })
+        }
+      }
+
+      await batch.commit()
+    }
 
     // GET: Load marketplace administration data.
     if (req.method === 'GET') {
@@ -186,6 +229,182 @@ export default async function handler(
             ? 'update-dispute-status'
             : 'update-refund-status'
         id = body.caseId ?? id
+      }
+
+      // Remove a store: hidden everywhere, but all records are kept.
+      if (action === 'store-remove') {
+        const storeId = body.storeId
+        const reason =
+          typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
+
+        if (typeof storeId !== 'string' || !storeId.trim()) {
+          return sendError(res, 400, 'A store is required')
+        }
+
+        if (reason.length < 5) {
+          return sendError(res, 400, 'Please give a reason (at least 5 characters)')
+        }
+
+        const storeRef = db.collection('stores').doc(storeId)
+        const storeSnap = await storeRef.get()
+
+        if (!storeSnap.exists) return sendError(res, 404, 'Store not found')
+
+        const storeName = String(storeSnap.data()?.name || storeId)
+
+        const sellerOrders = await db
+          .collection('sellerOrders')
+          .where('sellerId', '==', storeId)
+          .limit(500)
+          .get()
+
+        // Money not yet paid out to this seller.
+        const open = sellerOrders.docs.filter((item) => {
+          const data = item.data()
+          const payout = data.payoutStatus || (data.paymentStatus === 'Paid' ? 'Held' : '')
+
+          return ['Held', 'Disputed', 'Released'].includes(payout)
+        })
+
+        if (open.length > 0 && body.force !== true) {
+          return res.status(409).json({
+            error: `This store still has ${open.length} payout(s) that are held, disputed or waiting to be paid. Removing the store does not pay or refund them.`,
+            needsConfirm: true,
+            openPayouts: open.length,
+          })
+        }
+
+        // Stop held money from being released automatically to a removed store.
+        const batch = db.batch()
+
+        for (const item of open) {
+          if ((item.data().payoutStatus || 'Held') === 'Held') {
+            batch.update(item.ref, {
+              autoReleaseAt: FieldValue.delete(),
+              holdReason: 'Store removed by administrator',
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+          }
+        }
+
+        const products = await db
+          .collection('products')
+          .where('storeId', '==', storeId)
+          .limit(450)
+          .get()
+
+        for (const product of products.docs) {
+          const data = product.data()
+
+          if (data.removedWithStore === true) continue
+
+          batch.update(product.ref, {
+            statusBeforeRemoval: data.status || 'Pending',
+            status: 'Suspended',
+            removedWithStore: true,
+          })
+        }
+
+        batch.update(storeRef, {
+          status: 'Removed',
+          verified: false,
+          removedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        await batch.commit()
+
+        await audit('store-remove', storeId, storeName, reason, {
+          openPayouts: open.length,
+        })
+
+        return res.status(200).json({ success: true })
+      }
+
+      // Bring a removed store back, with its products.
+      if (action === 'store-restore') {
+        const storeId = body.storeId
+
+        if (typeof storeId !== 'string' || !storeId.trim()) {
+          return sendError(res, 400, 'A store is required')
+        }
+
+        const storeRef = db.collection('stores').doc(storeId)
+        const storeSnap = await storeRef.get()
+
+        if (!storeSnap.exists) return sendError(res, 404, 'Store not found')
+
+        if (storeSnap.data()?.status !== 'Removed') {
+          return sendError(res, 400, 'This store has not been removed')
+        }
+
+        await restoreProducts(storeId)
+
+        await storeRef.update({
+          status: 'Suspended',
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+
+        await audit('store-restore', storeId, String(storeSnap.data()?.name || storeId), 'Restored (set to Suspended; reactivate when ready)')
+
+        return res.status(200).json({ success: true })
+      }
+
+      // Permanently delete a store that has never had an order.
+      if (action === 'store-delete') {
+        const storeId = body.storeId
+        const confirmName = typeof body.confirmName === 'string' ? body.confirmName.trim() : ''
+        const reason =
+          typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : ''
+
+        if (typeof storeId !== 'string' || !storeId.trim()) {
+          return sendError(res, 400, 'A store is required')
+        }
+
+        const storeRef = db.collection('stores').doc(storeId)
+        const storeSnap = await storeRef.get()
+
+        if (!storeSnap.exists) return sendError(res, 404, 'Store not found')
+
+        const storeName = String(storeSnap.data()?.name || storeId)
+
+        if (confirmName.toLowerCase() !== storeName.toLowerCase()) {
+          return sendError(res, 400, 'Type the exact store name to confirm')
+        }
+
+        const history = await db
+          .collection('sellerOrders')
+          .where('sellerId', '==', storeId)
+          .limit(1)
+          .get()
+
+        if (!history.empty) {
+          return sendError(
+            res,
+            409,
+            'This store has order history, so it can only be removed, not deleted.',
+          )
+        }
+
+        const [products, ratings] = await Promise.all([
+          db.collection('products').where('storeId', '==', storeId).limit(450).get(),
+          db.collection('storeRatings').where('storeId', '==', storeId).limit(450).get(),
+        ])
+
+        const batch = db.batch()
+
+        products.docs.forEach((item) => batch.delete(item.ref))
+        ratings.docs.forEach((item) => batch.delete(item.ref))
+        batch.delete(db.collection('sellerVerifications').doc(storeId))
+        batch.delete(storeRef)
+
+        await batch.commit()
+
+        await audit('store-delete', storeId, storeName, reason || 'Deleted permanently', {
+          productsDeleted: products.size,
+        })
+
+        return res.status(200).json({ success: true })
       }
 
       if (action === 'set-require-verified') {
@@ -390,10 +609,16 @@ export default async function handler(
           return sendError(res, 404, 'Store not found')
         }
 
+        const previousStatus = storeSnapshot.data()?.status
+
         await storeRef.update({
           status,
           updatedAt: FieldValue.serverTimestamp(),
         })
+
+        if (previousStatus === 'Removed') {
+          await restoreProducts(id)
+        }
 
         return res.status(200).json({ success: true })
       }
