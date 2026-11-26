@@ -78,7 +78,7 @@ type ReviewStatus = 'Pending' | 'Approved' | 'Rejected'
 type Review = {
   id: string
   name: string
-  email: string
+  email?: string
   rating: number
   comment: string
   status: ReviewStatus
@@ -181,6 +181,7 @@ export default function AdminDashboard() {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewEmails, setReviewEmails] = useState<Record<string, string>>({})
   const [stores, setStores] = useState<Store[]>([])
 
   const [reviewsLoading, setReviewsLoading] = useState(true)
@@ -342,6 +343,24 @@ export default function AdminDashboard() {
       },
     )
 
+    const unsubscribeReviewContacts = onSnapshot(
+      collection(firestore, 'reviewContacts'),
+      (snapshot) => {
+        const emails: Record<string, string> = {}
+
+        snapshot.docs.forEach((item) => {
+          const email = item.data().email
+
+          if (typeof email === 'string') emails[item.id] = email
+        })
+
+        setReviewEmails(emails)
+      },
+      (err) => {
+        console.error('Review contacts error:', err)
+      },
+    )
+
     const unsubscribeStores = onSnapshot(
       storesQuery,
       (snapshot) => {
@@ -365,6 +384,7 @@ export default function AdminDashboard() {
       unsubscribeEnquiries()
       unsubscribeCustomers()
       unsubscribeReviews()
+      unsubscribeReviewContacts()
       unsubscribeStores()
     }
   }, [authReady, isAdmin])
@@ -1091,7 +1111,15 @@ export default function AdminDashboard() {
                   <div className="admin-enquiry-top">
                     <div>
                       <h3>{review.name || 'Customer'}</h3>
-                      <a href={`mailto:${review.email}`}>{review.email}</a>
+                      {(reviewEmails[review.id] || review.email) ? (
+                        <a
+                          href={`mailto:${reviewEmails[review.id] || review.email}`}
+                        >
+                          {reviewEmails[review.id] || review.email}
+                        </a>
+                      ) : (
+                        <span>No email on file</span>
+                      )}
                       <span>Rating: {review.rating} / 5</span>
                     </div>
                     <span className={`admin-status ${status.toLowerCase()}`}>
