@@ -21,6 +21,7 @@ import { db } from './firebase'
 import { useCart } from './CartContext'
 import ThemeToggle from './ThemeToggle'
 import { RatingSummary } from './StoreRatings'
+import VerifiedBadge from './VerifiedBadge'
 
 type StoreItem = {
   id: string
@@ -34,6 +35,7 @@ type StoreItem = {
   status: string
   ratingAverage?: number
   ratingCount?: number
+  verified?: boolean
 }
 
 type ProductItem = {
@@ -486,6 +488,8 @@ export default function MarketplaceHome() {
                     <h3>{store.name}</h3>
                     <p>{store.description}</p>
                     <small>{store.location || 'Nigeria'}</small>
+
+                    {store.verified === true && <VerifiedBadge />}
 
                     <RatingSummary
                       average={store.ratingAverage}
