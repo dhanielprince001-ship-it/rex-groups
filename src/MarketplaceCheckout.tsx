@@ -1,5 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { Link } from 'react-router-dom'
+import { doc, getDoc } from 'firebase/firestore'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -11,6 +18,8 @@ import {
 import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
 import ThemeToggle from './ThemeToggle'
+import { db } from './firebase'
+import { readZones, suggestZone, type DeliveryZone } from './delivery'
 
 const money = new Intl.NumberFormat('en-NG', {
   style: 'currency',
@@ -36,6 +45,90 @@ export default function MarketplaceCheckout() {
   const [orderId, setOrderId] = useState('')
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState('')
+  const [placedTotal, setPlacedTotal] = useState<number | null>(null)
+
+  // Each store in the cart has its own delivery price list.
+  const [zonesByStore, setZonesByStore] = useState<
+    Record<string, DeliveryZone[]>
+  >({})
+  const [zonesLoading, setZonesLoading] = useState(true)
+  const [choices, setChoices] = useState<Record<string, string>>({})
+  const pickedByHand = useRef<Set<string>>(new Set())
+
+  const cartStores = useMemo(() => {
+    const stores = new Map<string, string>()
+
+    for (const item of items) {
+      stores.set(item.storeId, item.storeName)
+    }
+
+    return Array.from(stores, ([id, name]) => ({ id, name }))
+  }, [items])
+
+  const storeKey = cartStores.map((store) => store.id).join('|')
+
+  useEffect(() => {
+    let active = true
+
+    async function loadZones() {
+      if (!db || !storeKey) {
+        setZonesLoading(false)
+        return
+      }
+
+      setZonesLoading(true)
+
+      const database = db
+
+      const entries = await Promise.all(
+        storeKey.split('|').map(async (id) => {
+          try {
+            const snapshot = await getDoc(doc(database, 'stores', id))
+
+            return [
+              id,
+              snapshot.exists() ? readZones(snapshot.data().deliveryZones) : [],
+            ] as const
+          } catch {
+            return [id, [] as DeliveryZone[]] as const
+          }
+        }),
+      )
+
+      if (!active) return
+
+      setZonesByStore(Object.fromEntries(entries))
+      setZonesLoading(false)
+    }
+
+    void loadZones()
+
+    return () => {
+      active = false
+    }
+  }, [storeKey])
+
+  // Pre-select the location that matches the delivery address.
+  useEffect(() => {
+    setChoices((current) => {
+      const next = { ...current }
+
+      for (const [storeId, zones] of Object.entries(zonesByStore)) {
+        if (zones.length === 0 || pickedByHand.current.has(storeId)) continue
+
+        next[storeId] = suggestZone(zones, city, state)
+      }
+
+      return next
+    })
+  }, [zonesByStore, city, state])
+
+  const deliveryTotal = cartStores.reduce((sum, store) => {
+    const zones = zonesByStore[store.id] || []
+    const zone = zones.find((entry) => entry.id === choices[store.id])
+
+    return sum + (zone ? zone.fee : 0)
+  }, 0)
 
   useEffect(() => {
     if (user) {
@@ -57,11 +150,33 @@ export default function MarketplaceCheckout() {
       return
     }
 
+    if (zonesLoading) {
+      setError('Delivery prices are still loading. Please try again in a moment.')
+      return
+    }
+
+    for (const store of cartStores) {
+      const zones = zonesByStore[store.id] || []
+
+      if (zones.length > 0 && !choices[store.id]) {
+        setError(`Please choose a delivery location for ${store.name}.`)
+        return
+      }
+    }
+
     setLoading(true)
     setError('')
 
     try {
       const token = await user.getIdToken()
+
+      const deliveryChoices: Record<string, string> = {}
+
+      for (const store of cartStores) {
+        if ((zonesByStore[store.id] || []).length > 0) {
+          deliveryChoices[store.id] = choices[store.id]
+        }
+      }
 
       const response = await fetch('/api/create-order', {
         method: 'POST',
@@ -75,6 +190,7 @@ export default function MarketplaceCheckout() {
             productId: item.id,
             quantity: item.quantity,
           })),
+          deliveryChoices,
           shippingAddress: {
             fullName,
             phone,
@@ -96,6 +212,7 @@ export default function MarketplaceCheckout() {
       }
 
       setOrderId(data.orderId)
+      setPlacedTotal(typeof data.total === 'number' ? data.total : null)
       clearCart()
     } catch (err) {
       setError(
@@ -214,6 +331,12 @@ export default function MarketplaceCheckout() {
           <p>
             Order reference: <strong>{orderId}</strong>
           </p>
+          {placedTotal !== null && (
+            <p>
+              Order total (products + delivery):{' '}
+              <strong>{money.format(placedTotal)}</strong>
+            </p>
+          )}
           <p>
             Current status: <strong>Awaiting Payment</strong>
           </p>
@@ -394,10 +517,65 @@ export default function MarketplaceCheckout() {
               autoComplete="postal-code"
             />
 
+            <h2>Delivery price</h2>
+
+            {zonesLoading ? (
+              <p className="rex-checkout-delivery-note">
+                Loading delivery prices...
+              </p>
+            ) : (
+              cartStores.map((store) => {
+                const zones = zonesByStore[store.id] || []
+
+                if (zones.length === 0) {
+                  return (
+                    <p
+                      className="rex-checkout-delivery-note"
+                      key={store.id}
+                    >
+                      <strong>{store.name}</strong> has not listed delivery
+                      prices, so no delivery fee is added. Agree delivery
+                      with the seller directly.
+                    </p>
+                  )
+                }
+
+                return (
+                  <div key={store.id}>
+                    <label htmlFor={`delivery-${store.id}`}>
+                      Deliver {store.name} order to
+                    </label>
+
+                    <select
+                      id={`delivery-${store.id}`}
+                      value={choices[store.id] || ''}
+                      onChange={(e) => {
+                        pickedByHand.current.add(store.id)
+                        setChoices((current) => ({
+                          ...current,
+                          [store.id]: e.target.value,
+                        }))
+                      }}
+                      required
+                    >
+                      <option value="">Choose your location</option>
+
+                      {zones.map((zone) => (
+                        <option key={zone.id} value={zone.id}>
+                          {zone.location} —{' '}
+                          {zone.fee > 0 ? money.format(zone.fee) : 'Free'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )
+              })
+            )}
+
             <button
               className="rex-cart-checkout"
               type="submit"
-              disabled={loading}
+              disabled={loading || zonesLoading}
             >
               {loading ? (
                 <>
@@ -441,10 +619,37 @@ export default function MarketplaceCheckout() {
               <strong>{money.format(subtotal)}</strong>
             </div>
 
+            {cartStores.map((store) => {
+              const zones = zonesByStore[store.id] || []
+              const zone = zones.find((entry) => entry.id === choices[store.id])
+
+              if (zones.length === 0) return null
+
+              return (
+                <div className="rex-cart-summary-total" key={store.id}>
+                  <span>
+                    Delivery · {store.name}
+                    {zone ? ` (${zone.location})` : ''}
+                  </span>
+                  <strong>
+                    {zone
+                      ? zone.fee > 0
+                        ? money.format(zone.fee)
+                        : 'Free'
+                      : 'Choose location'}
+                  </strong>
+                </div>
+              )
+            })}
+
+            <div className="rex-cart-summary-total rex-checkout-grand">
+              <span>Total to pay</span>
+              <strong>{money.format(subtotal + deliveryTotal)}</strong>
+            </div>
+
             <p>
-              Delivery charges will be confirmed separately. No payment
-              is collected in this checkout stage until Paystack is
-              configured.
+              The delivery price is set by each seller and goes to them
+              in full. Payment is collected after you place the order.
             </p>
           </aside>
         </div>
