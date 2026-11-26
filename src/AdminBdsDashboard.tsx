@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { Download, Loader2, Search, Send } from 'lucide-react'
 
 import { db } from './firebase'
@@ -142,7 +142,7 @@ function AdminDetail({ request }: { request: BdsRequest }) {
 
   useEffect(() => {
     if (!db) return
-    const base = collection(db, 'bdsRequests', request.id)
+    const base = doc(db, 'bdsRequests', request.id)
     const asc = (a: { createdAt?: BdsRequest['createdAt'] }, b: { createdAt?: BdsRequest['createdAt'] }) => (toDate(a.createdAt)?.getTime() ?? Date.now()) - (toDate(b.createdAt)?.getTime() ?? Date.now())
     const a = onSnapshot(collection(base, 'updates'), (s) => setUpdates(s.docs.map((d) => ({ id: d.id, ...d.data() }) as BdsUpdate).sort((x, y) => asc(y, x))), () => undefined)
     const b = onSnapshot(collection(base, 'messages'), (s) => setMessages(s.docs.map((d) => ({ id: d.id, ...d.data() }) as BdsMessage).sort(asc)), () => undefined)
