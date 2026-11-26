@@ -5,6 +5,8 @@ import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import SiteLayout from './SiteLayout'
 import HomePage from './HomePage'
 import BusinessDigitalSolutionsPage from './BusinessDigitalSolutionsPage'
+import ClientDashboard from './ClientDashboard'
+import AdminBdsDashboard from './AdminBdsDashboard'
 import MarketplacePage from './MarketplacePage'
 import MarketplaceHome from './MarketplaceHome'
 import MarketplaceCart from './MarketplaceCart'
@@ -25,6 +27,14 @@ function getPageTitle(pathname: string) {
 
   if (pathname === '/business-digital-solutions') {
     return `Business Digital Solutions | ${BASE_TITLE}`
+  }
+
+  if (pathname === '/business-digital-solutions/dashboard') {
+    return `Client Dashboard | ${BASE_TITLE}`
+  }
+
+  if (pathname === '/business-digital-solutions/admin') {
+    return `Digital Solutions Admin | ${BASE_TITLE}`
   }
 
   if (pathname === '/marketplace') return `Marketplace | ${BASE_TITLE}`
@@ -178,6 +188,14 @@ export default function App() {
             <Route
               path="/business-digital-solutions"
               element={<BusinessDigitalSolutionsPage />}
+            />
+            <Route
+              path="/business-digital-solutions/dashboard"
+              element={<ClientDashboard />}
+            />
+            <Route
+              path="/business-digital-solutions/admin"
+              element={<AdminBdsDashboard />}
             />
             <Route path="*" element={<NotFound />} />
           </Route>
