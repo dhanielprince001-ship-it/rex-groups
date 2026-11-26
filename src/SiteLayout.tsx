@@ -4,31 +4,14 @@ import {
   type CSSProperties,
 } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { ArrowUpRight, Sun, Moon, Mail } from 'lucide-react'
+import { ArrowUpRight, Mail } from 'lucide-react'
 import { useTheme } from './ThemeContext'
+import ThemeToggle from './ThemeToggle'
 
 import { AuthButton } from './AuthPanel'
 import { EMAIL, NAV_LINKS, SOCIALS } from './siteConfig'
 
-type Theme = 'dark' | 'light'
-
 const MOBILE_QUERY = '(max-width: 900px)'
-
-function getInitialTheme(): Theme {
-  try {
-    const saved = localStorage.getItem('rex-theme')
-
-    if (saved === 'dark' || saved === 'light') {
-      return saved
-    }
-  } catch {
-    // Storage unavailable
-  }
-
-  return window.matchMedia?.('(prefers-color-scheme: light)').matches
-    ? 'light'
-    : 'dark'
-}
 
 // Reactive replacement for reading window.innerWidth during render.
 function useIsMobile() {
@@ -57,7 +40,7 @@ export default function SiteLayout() {
   const { pathname } = useLocation()
   const isMobile = useIsMobile()
 
-  const { theme, toggleTheme } = useTheme()
+  const { theme } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(!loaderAlreadyShown)
 
@@ -79,24 +62,6 @@ export default function SiteLayout() {
   useEffect(() => {
     setMenuOpen(false)
   }, [pathname])
-
-  // Theme management
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme
-
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute(
-        'content',
-        theme === 'dark' ? '#0b0d10' : '#f5f6f3',
-      )
-
-    try {
-      localStorage.setItem('rex-theme', theme)
-    } catch {
-      // Ignore storage errors
-    }
-  }, [theme])
 
   // Mobile navigation management
   useEffect(() => {
@@ -223,20 +188,7 @@ export default function SiteLayout() {
             <AuthButton />
           </div>
 
-          <button
-            type="button"
-            className="icon-btn theme-btn"
-            aria-label={`Switch to ${
-              theme === 'dark' ? 'light' : 'dark'
-            } theme`}
-            onClick={toggleTheme}
-          >
-            {theme === 'dark' ? (
-              <Sun size={18} aria-hidden="true" />
-            ) : (
-              <Moon size={18} aria-hidden="true" />
-            )}
-          </button>
+          <ThemeToggle className="icon-btn theme-btn" />
 
           <button
             type="button"
