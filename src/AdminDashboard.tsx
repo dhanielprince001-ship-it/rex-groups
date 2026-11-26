@@ -87,7 +87,7 @@ type Review = {
   createdAt?: { toDate: () => Date }
 }
 
-type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
+type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended' | 'Removed'
 
 type Store = {
   id: string
@@ -457,6 +457,118 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('Store status update failed:', err)
       setError('Could not update this store. Please try again.')
+    } finally {
+      setUpdating('')
+    }
+  }
+
+  // Delete a store. Stores with no orders are erased (with their images);
+  // stores with order history are removed (hidden) so records are kept.
+  async function deleteStore(store: Store) {
+    if (!user || !isAdmin) {
+      setError('Administrator permission is required.')
+      return
+    }
+
+    const name = store.name || store.id
+
+    const typed = window.prompt(
+      `Delete "${name}"?\n\nIf it has no orders, the store, its products, ratings and images are erased permanently. If it has order history, it is removed (hidden) instead and records are kept.\n\nType the store name to confirm:`,
+    )
+
+    if (!typed) return
+
+    if (typed.trim().toLowerCase() !== name.trim().toLowerCase()) {
+      setError('The name you typed did not match. Nothing was deleted.')
+      return
+    }
+
+    setUpdating(store.id)
+    setError('')
+    setSuccess('')
+
+    async function call(body: Record<string, unknown>) {
+      const token = await user!.getIdToken()
+
+      const response = await fetch('/api/admin-marketplace', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+      const result = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        const failure = new Error(
+          result.error || 'The request could not be completed.',
+        ) as Error & { needsConfirm?: boolean }
+
+        failure.needsConfirm = result.needsConfirm === true
+        throw failure
+      }
+
+      return result
+    }
+
+    try {
+      try {
+        const result = await call({
+          action: 'store-delete',
+          storeId: store.id,
+          confirmName: typed,
+          reason: 'Deleted from the admin dashboard',
+        })
+
+        setSuccess(
+          result.imagesFailed
+            ? `Store deleted. ${result.imagesFailed} image(s) could not be removed from Cloudinary.`
+            : 'Store deleted permanently.',
+        )
+        return
+      } catch (err) {
+        if (!(err instanceof Error) || !err.message.includes('order history')) {
+          throw err
+        }
+      }
+
+      // Has orders: fall back to removing the store.
+      const reason = window.prompt(
+        `"${name}" has order history, so it cannot be erased. It can be removed instead: the store and its products are hidden, and orders and payment records are kept.\n\nReason for removing (required):`,
+      )
+
+      if (!reason || reason.trim().length < 5) {
+        setError('Nothing was deleted.')
+        return
+      }
+
+      try {
+        await call({ action: 'store-remove', storeId: store.id, reason })
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          (err as Error & { needsConfirm?: boolean }).needsConfirm &&
+          window.confirm(`${err.message}\n\nRemove the store anyway?`)
+        ) {
+          await call({
+            action: 'store-remove',
+            storeId: store.id,
+            reason,
+            force: true,
+          })
+        } else {
+          throw err
+        }
+      }
+
+      setSuccess('Store removed. Its orders and payment records were kept.')
+    } catch (err) {
+      console.error('Store delete failed:', err)
+      setError(
+        err instanceof Error ? err.message : 'Could not delete this store.',
+      )
     } finally {
       setUpdating('')
     }
@@ -854,7 +966,7 @@ export default function AdminDashboard() {
                         type="button"
                         className="admin-button"
                         onClick={() => changeStoreStatus(store.id, 'Approved')}
-                        disabled={updating === store.id || status === 'Approved'}
+                        disabled={updating === store.id || status === 'Approved' || status === 'Removed'}
                       >
                         <CheckCircle2 size={16} />
                         Approve
@@ -864,7 +976,7 @@ export default function AdminDashboard() {
                         type="button"
                         className="admin-button"
                         onClick={() => changeStoreStatus(store.id, 'Rejected')}
-                        disabled={updating === store.id || status === 'Rejected'}
+                        disabled={updating === store.id || status === 'Rejected' || status === 'Removed'}
                       >
                         <X size={16} />
                         Reject
@@ -874,10 +986,20 @@ export default function AdminDashboard() {
                         type="button"
                         className="admin-button"
                         onClick={() => changeStoreStatus(store.id, 'Suspended')}
-                        disabled={updating === store.id || status === 'Suspended'}
+                        disabled={updating === store.id || status === 'Suspended' || status === 'Removed'}
                       >
                         <ShieldCheck size={16} />
                         Suspend
+                      </button>
+
+                      <button
+                        type="button"
+                        className="admin-button"
+                        onClick={() => void deleteStore(store)}
+                        disabled={updating === store.id || status === 'Removed'}
+                      >
+                        <Trash2 size={16} />
+                        {status === 'Removed' ? 'Removed' : 'Delete'}
                       </button>
                     </div>
                   </div>
