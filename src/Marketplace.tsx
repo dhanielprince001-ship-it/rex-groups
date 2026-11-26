@@ -18,6 +18,7 @@ import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import SellerInsights from './SellerInsights'
 import SellerDelivery from './SellerDelivery'
+import SellerVerification from './SellerVerification'
 import { RatingSummary } from './StoreRatings'
 import { readZones } from './delivery'
 
@@ -95,6 +96,10 @@ type SellerOrder = {
   subtotal: number
   deliveryFee?: number
   deliveryLocation?: string
+  payoutStatus?: string
+  payoutReference?: string
+  autoReleaseAt?: { seconds?: number } | null
+  disputeReason?: string
   commissionAmount: number
   sellerNetAmount: number
   paymentStatus: string
@@ -1163,6 +1168,9 @@ export default function Marketplace() {
             loadingOrders={loadingOrders}
           />
 
+          {/* IDENTITY CHECK */}
+          <SellerVerification />
+
           {/* STORE RATING */}
           <div className="seller-rating-line">
             <span>Your store rating</span>
@@ -1318,6 +1326,42 @@ export default function Marketplace() {
                         </strong>
                       </div>
                     </div>
+
+                    {order.paymentStatus === 'Paid' && (
+                      <div className="seller-payout">
+                        <strong>Your payout</strong>
+
+                        <span>
+                          {(() => {
+                            const payout = order.payoutStatus || 'Held'
+
+                            if (payout === 'Held') {
+                              return order.autoReleaseAt?.seconds
+                                ? `Held until the buyer confirms delivery. Released automatically on ${new Date(order.autoReleaseAt.seconds * 1000).toLocaleDateString()} unless the buyer reports a problem.`
+                                : 'Held by Rex Groups until the buyer confirms delivery.'
+                            }
+
+                            if (payout === 'Released') {
+                              return 'Released. Rex Groups will pay this out to you.'
+                            }
+
+                            if (payout === 'Paid Out') {
+                              return `Paid out to you${order.payoutReference ? ` (ref: ${order.payoutReference})` : ''}.`
+                            }
+
+                            if (payout === 'Disputed') {
+                              return 'On hold: the buyer reported a problem. Rex Groups will contact you.'
+                            }
+
+                            if (payout === 'Cancelled') {
+                              return 'Cancelled: the buyer was refunded.'
+                            }
+
+                            return payout
+                          })()}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="seller-order-status">
                       <strong>Fulfilment status</strong>
