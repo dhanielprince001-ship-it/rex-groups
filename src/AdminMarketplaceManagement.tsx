@@ -265,6 +265,74 @@ export default function AdminMarketplaceManagement() {
     }
   }
 
+  // Remove (hide) a store but keep every record.
+  async function removeStore(seller: SellerRow) {
+    const name = seller.name || seller.id
+
+    const reason = window.prompt(
+      `Remove "${name}"? It and its products will be hidden. Orders and payment records are kept.\n\nReason (required):`,
+    )
+
+    if (!reason || reason.trim().length < 5) return
+
+    setBusy(seller.id)
+    setError('')
+    setSuccess('')
+
+    try {
+      try {
+        await request('PATCH', {
+          action: 'store-remove',
+          storeId: seller.id,
+          reason,
+        })
+      } catch (err) {
+        // The server warns when money is still held for this seller.
+        if (
+          err instanceof Error &&
+          err.message.includes('payout(s)') &&
+          window.confirm(`${err.message}\n\nRemove the store anyway?`)
+        ) {
+          await request('PATCH', {
+            action: 'store-remove',
+            storeId: seller.id,
+            reason,
+            force: true,
+          })
+        } else {
+          throw err
+        }
+      }
+
+      setSuccess('Store removed.')
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to remove this store.',
+      )
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // Permanent deletion: only stores that never had an order.
+  async function deleteStore(seller: SellerRow) {
+    const name = seller.name || seller.id
+
+    const typed = window.prompt(
+      `This permanently deletes "${name}", its products and ratings. It cannot be undone.\n\nType the store name to confirm:`,
+    )
+
+    if (!typed) return
+
+    await action(seller.id, {
+      action: 'store-delete',
+      storeId: seller.id,
+      confirmName: typed,
+      reason: 'Deleted from the admin panel',
+    })
+  }
+
   async function saveCommission() {
     const value = Number(commission)
 
@@ -512,7 +580,8 @@ export default function AdminMarketplaceManagement() {
 
                     <td>
                       <div className="admin-market-row-actions">
-                        {seller.status !== 'Approved' && (
+                        {seller.status !== 'Approved' &&
+                          seller.status !== 'Removed' && (
                           <button
                             onClick={() =>
                               void action(seller.id, {
@@ -527,7 +596,8 @@ export default function AdminMarketplaceManagement() {
                           </button>
                         )}
 
-                        {seller.status !== 'Suspended' && (
+                        {seller.status !== 'Suspended' &&
+                          seller.status !== 'Removed' && (
                           <button
                             onClick={() =>
                               void action(seller.id, {
@@ -557,7 +627,8 @@ export default function AdminMarketplaceManagement() {
                           </button>
                         )}
 
-                        {seller.status !== 'Rejected' && (
+                        {seller.status !== 'Rejected' &&
+                          seller.status !== 'Removed' && (
                           <button
                             onClick={() =>
                               void action(seller.id, {
@@ -570,6 +641,38 @@ export default function AdminMarketplaceManagement() {
                           >
                             Reject
                           </button>
+                        )}
+
+                        {seller.status !== 'Removed' && (
+                          <button
+                            disabled={!!busy}
+                            onClick={() => void removeStore(seller)}
+                          >
+                            Remove
+                          </button>
+                        )}
+
+                        {seller.status === 'Removed' && (
+                          <>
+                            <button
+                              disabled={!!busy}
+                              onClick={() =>
+                                void action(seller.id, {
+                                  action: 'store-restore',
+                                  storeId: seller.id,
+                                })
+                              }
+                            >
+                              Restore
+                            </button>
+
+                            <button
+                              disabled={!!busy}
+                              onClick={() => void deleteStore(seller)}
+                            >
+                              Delete permanently
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
