@@ -1,12 +1,11 @@
-
 import { Link } from 'react-router-dom'
-import { Sun, Moon } from 'lucide-react'
 
 import Marketplace from './Marketplace'
 import { useTheme } from './ThemeContext'
+import ThemeToggle from './ThemeToggle'
 
 export default function MarketplacePage() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme } = useTheme()
 
   return (
     <div className={`app ${theme} marketplace-page`}>
@@ -16,18 +15,7 @@ export default function MarketplacePage() {
         </Link>
 
         <div className="marketplace-page-actions">
-          <button
-            type="button"
-            className="rex-market-theme-toggle"
-            onClick={toggleTheme}
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-          >
-            {theme === 'dark' ? (
-              <Sun size={19} />
-            ) : (
-              <Moon size={19} />
-            )}
-          </button>
+          <ThemeToggle size={19} />
 
           <Link to="/">
             Rex Groups
