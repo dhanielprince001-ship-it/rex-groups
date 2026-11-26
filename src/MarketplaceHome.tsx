@@ -20,6 +20,7 @@ import {
 import { db } from './firebase'
 import { useCart } from './CartContext'
 import ThemeToggle from './ThemeToggle'
+import { RatingSummary } from './StoreRatings'
 
 type StoreItem = {
   id: string
@@ -31,6 +32,8 @@ type StoreItem = {
   coverUrl?: string
   location?: string
   status: string
+  ratingAverage?: number
+  ratingCount?: number
 }
 
 type ProductItem = {
@@ -483,6 +486,11 @@ export default function MarketplaceHome() {
                     <h3>{store.name}</h3>
                     <p>{store.description}</p>
                     <small>{store.location || 'Nigeria'}</small>
+
+                    <RatingSummary
+                      average={store.ratingAverage}
+                      count={store.ratingCount}
+                    />
 
                     <Link to={`/marketplace/store/${store.id}`}>
                       Visit store <ArrowUpRight size={16} />
