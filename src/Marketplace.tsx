@@ -658,7 +658,11 @@ export default function Marketplace() {
       const storeRef = doc(database, 'stores', user.uid)
 
       if (store) {
-        await updateDoc(storeRef, storeData)
+        // ownerName is only set when the store is first created.
+        const updateData: Partial<typeof storeData> = { ...storeData }
+        delete updateData.ownerName
+
+        await updateDoc(storeRef, updateData)
         setMessage('Store details updated successfully.')
       } else {
         await setDoc(storeRef, {
