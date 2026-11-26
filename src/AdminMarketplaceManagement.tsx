@@ -599,6 +599,12 @@ export default function AdminMarketplaceManagement() {
 
                     <td>
                       {money.format(number(order.subtotal))}
+
+                      {number(order.deliveryFee) > 0 && (
+                        <small style={{ display: 'block', opacity: 0.7 }}>
+                          + {money.format(number(order.deliveryFee))} delivery
+                        </small>
+                      )}
                     </td>
 
                     <td>
