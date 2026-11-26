@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, onSnapshot, query, where } from 'firebase/firestore'
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { Loader2, Plus, Send } from 'lucide-react'
 
 import { db } from './firebase'
@@ -114,7 +114,7 @@ function RequestDetail({ request }: { request: BdsRequest }) {
 
   useEffect(() => {
     if (!db) return
-    const base = collection(db, 'bdsRequests', request.id)
+    const base = doc(db, 'bdsRequests', request.id)
     const byTime = (a: { createdAt?: BdsRequest['createdAt'] }, b: { createdAt?: BdsRequest['createdAt'] }) =>
       (toDate(a.createdAt)?.getTime() ?? Date.now()) - (toDate(b.createdAt)?.getTime() ?? Date.now())
     const u1 = onSnapshot(collection(base, 'updates'), (s) => setUpdates(s.docs.map((d) => ({ id: d.id, ...d.data() }) as BdsUpdate).sort((a, b) => byTime(b, a))), () => undefined)
