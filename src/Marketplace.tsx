@@ -17,6 +17,9 @@ import {
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import SellerInsights from './SellerInsights'
+import SellerDelivery from './SellerDelivery'
+import { RatingSummary } from './StoreRatings'
+import { readZones } from './delivery'
 
 import {
   Store,
@@ -51,6 +54,9 @@ type StoreData = {
   email?: string
   location?: string
   socialLink?: string
+  deliveryZones?: unknown
+  ratingAverage?: number
+  ratingCount?: number
 }
 
 type ProductStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
@@ -87,6 +93,8 @@ type SellerOrder = {
     imageUrl?: string
   }[]
   subtotal: number
+  deliveryFee?: number
+  deliveryLocation?: string
   commissionAmount: number
   sellerNetAmount: number
   paymentStatus: string
@@ -1151,6 +1159,18 @@ export default function Marketplace() {
             loadingOrders={loadingOrders}
           />
 
+          {/* STORE RATING */}
+          <div className="seller-rating-line">
+            <span>Your store rating</span>
+            <RatingSummary
+              average={store.ratingAverage}
+              count={store.ratingCount}
+            />
+          </div>
+
+          {/* DELIVERY PRICES */}
+          <SellerDelivery zones={readZones(store.deliveryZones)} />
+
           {/* MY ORDERS */}
           <div className="seller-orders-section">
             <div className="seller-orders-heading">
@@ -1265,8 +1285,23 @@ export default function Marketplace() {
                         </strong>
                       </div>
 
+                      {(order.deliveryFee ?? 0) > 0 && (
+                        <div>
+                          <span>
+                            Delivery
+                            {order.deliveryLocation
+                              ? ` to ${order.deliveryLocation}`
+                              : ''}{' '}
+                            (paid to you in full)
+                          </span>
+                          <strong>
+                            {naira.format(order.deliveryFee || 0)}
+                          </strong>
+                        </div>
+                      )}
+
                       <div>
-                        <span>Rex Groups commission</span>
+                        <span>Rex Groups commission (products only)</span>
                         <strong>
                           {naira.format(order.commissionAmount || 0)}
                         </strong>
