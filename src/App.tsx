@@ -13,6 +13,7 @@ import MarketplaceOrders from './MarketplaceOrders'
 import TrackOrderButton from './TrackOrderButton'
 import { CartProvider } from './CartContext'
 import { ThemeProvider } from './ThemeContext'
+import ThemeToggle from './ThemeToggle'
 
 const BASE_TITLE = 'Rex Groups'
 
@@ -134,6 +135,8 @@ function MarketplacePlaceholder({
         <Link to="/marketplace">
           Back to marketplace
         </Link>
+
+        <ThemeToggle />
       </header>
 
       <section className="rex-market-placeholder-content">
