@@ -22,6 +22,7 @@ import {
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
+import ThemeToggle from './ThemeToggle'
 
 type StoreData = {
   id: string
@@ -304,6 +305,7 @@ export default function MarketplaceStore() {
             <span>REX <b>MARKETPLACE</b></span>
           </Link>
           <Link to="/marketplace">Back to marketplace</Link>
+          <ThemeToggle />
         </header>
 
         <div className="rex-store-state">
@@ -323,6 +325,7 @@ export default function MarketplaceStore() {
             <span>REX <b>MARKETPLACE</b></span>
           </Link>
           <Link to="/marketplace">Back to marketplace</Link>
+          <ThemeToggle />
         </header>
 
         <section className="rex-store-state">
@@ -352,6 +355,7 @@ export default function MarketplaceStore() {
             <ShoppingBag size={17} /> Cart
           </Link>
         </nav>
+        <ThemeToggle />
       </header>
 
       <main>
