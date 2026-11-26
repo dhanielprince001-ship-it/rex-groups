@@ -325,12 +325,31 @@ export default function AdminMarketplaceManagement() {
 
     if (!typed) return
 
-    await action(seller.id, {
-      action: 'store-delete',
-      storeId: seller.id,
-      confirmName: typed,
-      reason: 'Deleted from the admin panel',
-    })
+    setBusy(seller.id)
+    setError('')
+    setSuccess('')
+
+    try {
+      const result = (await request('PATCH', {
+        action: 'store-delete',
+        storeId: seller.id,
+        confirmName: typed,
+        reason: 'Deleted from the admin panel',
+      })) as { imagesDeleted?: number; imagesFailed?: number } | undefined
+
+      setSuccess(
+        result?.imagesFailed
+          ? `Store deleted. ${result.imagesFailed} image(s) could not be removed from Cloudinary.`
+          : 'Store deleted.',
+      )
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to delete this store.',
+      )
+    } finally {
+      setBusy('')
+    }
   }
 
   async function saveCommission() {
@@ -653,27 +672,30 @@ export default function AdminMarketplaceManagement() {
                         )}
 
                         {seller.status === 'Removed' && (
-                          <>
-                            <button
-                              disabled={!!busy}
-                              onClick={() =>
-                                void action(seller.id, {
-                                  action: 'store-restore',
-                                  storeId: seller.id,
-                                })
-                              }
-                            >
-                              Restore
-                            </button>
-
-                            <button
-                              disabled={!!busy}
-                              onClick={() => void deleteStore(seller)}
-                            >
-                              Delete permanently
-                            </button>
-                          </>
+                          <button
+                            disabled={!!busy}
+                            onClick={() =>
+                              void action(seller.id, {
+                                action: 'store-restore',
+                                storeId: seller.id,
+                              })
+                            }
+                          >
+                            Restore
+                          </button>
                         )}
+
+                        <button
+                          disabled={!!busy || seller.orderCount > 0}
+                          title={
+                            seller.orderCount > 0
+                              ? 'This store has order history, so it can only be removed.'
+                              : 'Permanently delete this store, its products and ratings'
+                          }
+                          onClick={() => void deleteStore(seller)}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
