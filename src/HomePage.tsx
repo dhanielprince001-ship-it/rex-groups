@@ -36,7 +36,13 @@ const SERVICE_OPTIONS = [
   'Other / Not sure yet',
 ]
 
-const SERVICES = [
+const SERVICES: {
+  icon: typeof Code2
+  number: string
+  title: string
+  text: string
+  to?: string
+}[] = [
   {
     icon: Code2,
     number: '01',
@@ -54,6 +60,7 @@ const SERVICES = [
     number: '03',
     title: 'Business Digital Solutions',
     text: 'Practical digital tools and workflows that reduce repetitive work and keep operations organised.',
+    to: '/business-digital-solutions',
   },
   {
     icon: Settings,
@@ -409,7 +416,7 @@ export default function HomePage() {
 
             <div className="service-grid">
               {SERVICES.map(
-                ({ icon: Icon, number, title, text }) => (
+                ({ icon: Icon, number, title, text, to }) => (
                   <article className="service-card" key={number}>
                     <div className="service-top">
                       <span>{number}</span>
@@ -423,15 +430,27 @@ export default function HomePage() {
                     <h3>{title}</h3>
                     <p>{text}</p>
 
-                    <a
-                      href="#contact"
-                      aria-label={`Enquire about ${title}`}
-                    >
-                      <ArrowUpRight
-                        size={18}
-                        aria-hidden="true"
-                      />
-                    </a>
+                    {to ? (
+                      <Link
+                        to={to}
+                        aria-label={`Learn more about ${title}`}
+                      >
+                        <ArrowUpRight
+                          size={18}
+                          aria-hidden="true"
+                        />
+                      </Link>
+                    ) : (
+                      <a
+                        href="#contact"
+                        aria-label={`Enquire about ${title}`}
+                      >
+                        <ArrowUpRight
+                          size={18}
+                          aria-hidden="true"
+                        />
+                      </a>
+                    )}
                   </article>
                 ),
               )}
