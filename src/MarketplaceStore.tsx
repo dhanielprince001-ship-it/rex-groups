@@ -25,6 +25,7 @@ import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
 import ThemeToggle from './ThemeToggle'
 import StoreReviews, { RatingSummary } from './StoreRatings'
+import VerifiedBadge from './VerifiedBadge'
 import { readZones } from './delivery'
 
 type StoreData = {
@@ -39,6 +40,7 @@ type StoreData = {
   deliveryZones?: unknown
   ratingAverage?: number
   ratingCount?: number
+  verified?: boolean
 }
 
 type ProductData = {
@@ -403,6 +405,8 @@ export default function MarketplaceStore() {
                   <MapPin size={15} />
                   {store.location || 'Nigeria'}
                 </span>
+
+                {store.verified === true && <VerifiedBadge />}
 
                 <a href="#reviews" className="rex-store-rating-link">
                   <RatingSummary
