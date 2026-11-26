@@ -289,7 +289,7 @@ export default async function handler(
       const order = orderSnap.data()!
 
       if (
-        Math.round(Number(order.subtotal) * 100) !==
+        Math.round(Number(order.total ?? order.subtotal) * 100) !==
         Number(payment.amount)
       ) {
         throw new Error('ORDER_AMOUNT_MISMATCH')
