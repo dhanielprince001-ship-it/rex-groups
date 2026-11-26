@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { useCart } from './CartContext'
+import ThemeToggle from './ThemeToggle'
 
 const money = new Intl.NumberFormat('en-NG', {
   style: 'currency',
@@ -30,6 +31,7 @@ export default function MarketplaceCart() {
           <Link to="/marketplace/orders">My orders</Link>
           <Link to="/marketplace">Continue shopping</Link>
         </nav>
+        <ThemeToggle />
       </header>
 
       <section className="rex-cart-content">
