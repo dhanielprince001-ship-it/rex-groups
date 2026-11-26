@@ -10,6 +10,7 @@ import {
 
 import { useAuth } from './AuthPanel'
 import { useCart } from './CartContext'
+import ThemeToggle from './ThemeToggle'
 
 const money = new Intl.NumberFormat('en-NG', {
   style: 'currency',
@@ -176,6 +177,7 @@ export default function MarketplaceCheckout() {
             <span>REX <b>MARKETPLACE</b></span>
           </Link>
           <Link to="/marketplace/cart">Back to cart</Link>
+          <ThemeToggle />
         </header>
 
         <section className="rex-checkout-message">
@@ -201,6 +203,7 @@ export default function MarketplaceCheckout() {
             <span className="rex-market-brand-mark">R<span>.</span></span>
             <span>REX <b>MARKETPLACE</b></span>
           </Link>
+          <ThemeToggle />
         </header>
 
         <section className="rex-checkout-message rex-checkout-success">
@@ -260,6 +263,7 @@ export default function MarketplaceCheckout() {
             <span className="rex-market-brand-mark">R<span>.</span></span>
             <span>REX <b>MARKETPLACE</b></span>
           </Link>
+          <ThemeToggle />
         </header>
 
         <section className="rex-checkout-message">
@@ -282,6 +286,7 @@ export default function MarketplaceCheckout() {
         </Link>
 
         <Link to="/marketplace/cart">Back to cart</Link>
+        <ThemeToggle />
       </header>
 
       <section className="rex-checkout-content">
