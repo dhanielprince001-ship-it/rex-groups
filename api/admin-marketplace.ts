@@ -267,7 +267,7 @@ export default async function handler(
         orderId,
         customerId: order.customerId ?? null,
         customerEmail: order.customerEmail ?? null,
-        amount: order.subtotal ?? 0,
+        amount: order.total ?? order.subtotal ?? 0,
         currency: order.currency ?? 'NGN',
         reason: reason.trim(),
         status: 'Pending',
