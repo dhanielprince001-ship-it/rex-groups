@@ -4,6 +4,7 @@ import { Link, Route, Routes, useLocation } from 'react-router-dom'
 
 import SiteLayout from './SiteLayout'
 import HomePage from './HomePage'
+import BusinessDigitalSolutionsPage from './BusinessDigitalSolutionsPage'
 import MarketplacePage from './MarketplacePage'
 import MarketplaceHome from './MarketplaceHome'
 import MarketplaceCart from './MarketplaceCart'
@@ -20,6 +21,10 @@ const BASE_TITLE = 'Rex Groups'
 function getPageTitle(pathname: string) {
   if (pathname === '/') {
     return 'Rex Groups | Technology. Business. Innovation.'
+  }
+
+  if (pathname === '/business-digital-solutions') {
+    return `Business Digital Solutions | ${BASE_TITLE}`
   }
 
   if (pathname === '/marketplace') return `Marketplace | ${BASE_TITLE}`
@@ -170,6 +175,10 @@ export default function App() {
         <Routes>
           <Route element={<SiteLayout />}>
             <Route index element={<HomePage />} />
+            <Route
+              path="/business-digital-solutions"
+              element={<BusinessDigitalSolutionsPage />}
+            />
             <Route path="*" element={<NotFound />} />
           </Route>
 
