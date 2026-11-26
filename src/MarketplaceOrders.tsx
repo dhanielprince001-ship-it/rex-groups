@@ -31,6 +31,8 @@ type OrderPackage = {
     imageUrl?: string
   }[]
   subtotal: number
+  deliveryFee?: number
+  deliveryLocation?: string
   status: string
   paymentStatus: string
   trackingNumber: string
@@ -418,6 +420,30 @@ export default function MarketplaceOrders() {
 
                             <b>{money.format(pack.subtotal)}</b>
                           </p>
+
+                          {(pack.deliveryFee ?? 0) > 0 || pack.deliveryLocation ? (
+                            <p className="rex-package-delivery">
+                              Delivery
+                              {pack.deliveryLocation
+                                ? ` to ${pack.deliveryLocation}`
+                                : ''}
+                              :{' '}
+                              <b>
+                                {(pack.deliveryFee ?? 0) > 0
+                                  ? money.format(pack.deliveryFee ?? 0)
+                                  : 'Free'}
+                              </b>
+                            </p>
+                          ) : null}
+
+                          {pack.status === 'Delivered' && pack.sellerId && (
+                            <Link
+                              className="rex-package-rate"
+                              to={`/marketplace/store/${pack.sellerId}#reviews`}
+                            >
+                              Rate this store
+                            </Link>
+                          )}
 
                           <ul className="rex-package-items">
                             {pack.items.map((item, index) => (
