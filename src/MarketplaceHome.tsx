@@ -19,8 +19,7 @@ import {
 
 import { db } from './firebase'
 import { useCart } from './CartContext'
-import { Sun, Moon } from 'lucide-react'
-import { useTheme } from './ThemeContext'
+import ThemeToggle from './ThemeToggle'
 
 type StoreItem = {
   id: string
@@ -74,7 +73,6 @@ export default function MarketplaceHome() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All categories')
   const [addedProduct, setAddedProduct] = useState('')
-  const { theme, toggleTheme } = useTheme()
 
   const { addItem, itemCount } = useCart()
 
@@ -213,14 +211,6 @@ export default function MarketplaceHome() {
           to="/marketplace"
           aria-label="Rex Groups Marketplace home"
         >
-          <button
-  type="button"
-  className="rex-market-theme-toggle"
-  onClick={toggleTheme}
-  aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
->
-  {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
-</button>
           <span className="rex-market-brand-mark">
             R<span>.</span>
           </span>
@@ -250,6 +240,7 @@ export default function MarketplaceHome() {
             Start selling <ArrowUpRight size={16} />
           </Link>
         </nav>
+        <ThemeToggle />
       </header>
 
       <main>
