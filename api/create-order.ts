@@ -202,6 +202,9 @@ export default async function handler(
     const configuredCommission =
       commissionSettings.data()?.commissionPercent
 
+    const requireVerified =
+      commissionSettings.data()?.requireVerifiedSellers === true
+
     const commissionPercent =
       typeof configuredCommission === 'number' &&
       Number.isFinite(configuredCommission) &&
@@ -282,6 +285,21 @@ export default async function handler(
         return res.status(400).json({
           error: 'A seller in your cart is not currently approved.',
         })
+      }
+
+      if (requireVerified) {
+        // Checked against the private verification record, never against a
+        // field the seller could edit themselves.
+        const verification = await database
+          .collection('sellerVerifications')
+          .doc(sellerId)
+          .get()
+
+        if (verification.data()?.status !== 'Verified') {
+          return res.status(400).json({
+            error: `${typeof store.name === 'string' ? store.name : 'A seller'} is not verified yet, so it cannot take orders right now.`,
+          })
+        }
       }
 
       const unitPriceKobo = Math.round(product.price * 100)
