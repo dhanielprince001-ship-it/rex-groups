@@ -38,7 +38,12 @@ import {
   RefreshCw,
 } from 'lucide-react'
 
-type StoreStatus = 'Pending' | 'Approved' | 'Rejected' | 'Suspended'
+type StoreStatus =
+  | 'Pending'
+  | 'Approved'
+  | 'Rejected'
+  | 'Suspended'
+  | 'Removed'
 
 type StoreData = {
   ownerId: string
@@ -282,7 +287,8 @@ export default function Marketplace() {
 
   const storeLocked =
     store?.status === 'Rejected' ||
-    store?.status === 'Suspended'
+    store?.status === 'Suspended' ||
+    store?.status === 'Removed'
 
   const uid = user?.uid
   const hasStore = store !== null
@@ -933,6 +939,9 @@ export default function Marketplace() {
 
               {store.status === 'Suspended' &&
                 'Your store is suspended. Contact Rex Groups.'}
+
+              {store.status === 'Removed' &&
+                'Your store has been removed from the marketplace. Contact Rex Groups if you think this is a mistake.'}
             </p>
           </div>
         </div>
