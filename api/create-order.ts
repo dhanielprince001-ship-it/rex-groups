@@ -35,6 +35,38 @@ function getFirebaseAdmin() {
   })
 }
 
+type DeliveryZone = {
+  id: string
+  location: string
+  fee: number
+}
+
+// Reads a store's saved delivery price list, ignoring anything malformed.
+function readDeliveryZones(value: unknown): DeliveryZone[] {
+  if (!Array.isArray(value)) return []
+
+  const zones: DeliveryZone[] = []
+
+  for (const entry of value) {
+    if (
+      entry &&
+      typeof entry.id === 'string' &&
+      typeof entry.location === 'string' &&
+      typeof entry.fee === 'number' &&
+      Number.isFinite(entry.fee) &&
+      entry.fee >= 0
+    ) {
+      zones.push({
+        id: entry.id,
+        location: entry.location,
+        fee: entry.fee,
+      })
+    }
+  }
+
+  return zones
+}
+
 function validText(value: unknown, maxLength: number) {
   return (
     typeof value === 'string' &&
@@ -190,7 +222,15 @@ export default async function handler(
         lineTotal: number
       }>
       subtotalKobo: number
+      deliveryZones: DeliveryZone[]
     }>()
+
+    const deliveryChoices: Record<string, unknown> =
+      body.deliveryChoices &&
+      typeof body.deliveryChoices === 'object' &&
+      !Array.isArray(body.deliveryChoices)
+        ? body.deliveryChoices
+        : {}
 
     let totalSubtotalKobo = 0
 
@@ -268,6 +308,7 @@ export default async function handler(
               : 'Store',
           items: [],
           subtotalKobo: 0,
+          deliveryZones: readDeliveryZones(store.deliveryZones),
         }
 
         sellerGroups.set(sellerId, group)
@@ -289,22 +330,81 @@ export default async function handler(
     const orderRef = database.collection('orders').doc()
     const batch = database.batch()
 
+    // Work out each seller's delivery fee from THEIR saved price list.
+    // The browser only says which location was picked; the price always
+    // comes from the database, so it cannot be changed by the customer.
+    const deliveryByStore = new Map<string, {
+      feeKobo: number
+      zoneId: string | null
+      location: string | null
+    }>()
+
+    for (const group of sellerGroups.values()) {
+      if (group.deliveryZones.length === 0) {
+        // The seller has not set any delivery prices yet.
+        deliveryByStore.set(group.sellerId, {
+          feeKobo: 0,
+          zoneId: null,
+          location: null,
+        })
+        continue
+      }
+
+      const chosenId = deliveryChoices[group.sellerId]
+
+      const zone = group.deliveryZones.find(
+        (entry) => entry.id === chosenId,
+      )
+
+      if (!zone) {
+        return res.status(400).json({
+          error: `Please choose a delivery location for ${group.storeName}.`,
+        })
+      }
+
+      deliveryByStore.set(group.sellerId, {
+        feeKobo: Math.round(zone.fee * 100),
+        zoneId: zone.id,
+        location: zone.location,
+      })
+    }
+
     const sellerOrderIds: string[] = []
+    const deliveryDetails: Array<{
+      sellerId: string
+      storeName: string
+      location: string | null
+      fee: number
+    }> = []
+
     let totalCommissionKobo = 0
+    let totalDeliveryKobo = 0
 
     for (const group of sellerGroups.values()) {
       const sellerOrderRef = database
         .collection('sellerOrders')
         .doc()
 
+      const delivery = deliveryByStore.get(group.sellerId)!
+
+      // Commission is charged on the products only. Delivery is paid
+      // to the seller in full.
       const commissionKobo = Math.round(
         group.subtotalKobo * commissionPercent / 100,
       )
 
       const sellerNetKobo =
-        group.subtotalKobo - commissionKobo
+        group.subtotalKobo - commissionKobo + delivery.feeKobo
 
       totalCommissionKobo += commissionKobo
+      totalDeliveryKobo += delivery.feeKobo
+
+      deliveryDetails.push({
+        sellerId: group.sellerId,
+        storeName: group.storeName,
+        location: delivery.location,
+        fee: delivery.feeKobo / 100,
+      })
       sellerOrderIds.push(sellerOrderRef.id)
 
       batch.set(sellerOrderRef, {
@@ -317,6 +417,10 @@ export default async function handler(
         storeName: group.storeName,
         items: group.items,
         subtotal: group.subtotalKobo / 100,
+        deliveryFee: delivery.feeKobo / 100,
+        deliveryZoneId: delivery.zoneId,
+        deliveryLocation: delivery.location,
+        total: (group.subtotalKobo + delivery.feeKobo) / 100,
         commissionPercent,
         commissionAmount: commissionKobo / 100,
         sellerNetAmount: sellerNetKobo / 100,
@@ -346,7 +450,9 @@ export default async function handler(
       sellerOrderIds,
       sellerCount: sellerGroups.size,
       subtotal: totalSubtotalKobo / 100,
-      deliveryFee: null,
+      deliveryFee: totalDeliveryKobo / 100,
+      deliveryDetails,
+      total: (totalSubtotalKobo + totalDeliveryKobo) / 100,
       commissionPercent,
       commissionAmount: totalCommissionKobo / 100,
       currency: 'NGN',
@@ -370,6 +476,8 @@ export default async function handler(
       success: true,
       orderId: orderRef.id,
       subtotal: totalSubtotalKobo / 100,
+      deliveryFee: totalDeliveryKobo / 100,
+      total: (totalSubtotalKobo + totalDeliveryKobo) / 100,
       commissionAmount: totalCommissionKobo / 100,
       commissionPercent,
       status: 'Awaiting Payment',
