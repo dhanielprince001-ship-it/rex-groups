@@ -93,7 +93,10 @@ export default async function handler(
       })
     }
 
-    const amountKobo = Math.round(Number(order.subtotal) * 100)
+    // Customers pay products + delivery. Older orders have no total.
+    const amountKobo = Math.round(
+      Number(order.total ?? order.subtotal) * 100,
+    )
 
     if (
       !Number.isSafeInteger(amountKobo) ||
