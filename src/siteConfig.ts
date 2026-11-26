@@ -19,6 +19,7 @@ export const SOCIALS = [
 export const NAV_LINKS = [
   { label: 'About', to: '/#about' },
   { label: 'Services', to: '/#services' },
+  { label: 'Digital', to: '/business-digital-solutions' },
   { label: 'Work', to: '/#work' },
   { label: 'Marketplace', to: '/marketplace' },
   { label: 'Process', to: '/#process' },
