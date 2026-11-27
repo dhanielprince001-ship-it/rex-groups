@@ -409,13 +409,14 @@ export default function Marketplace() {
   }, [uid, ready, hasStore, database])
 
   // LOAD SELLER ORDERS
-  async function loadSellerOrders() {
+  async function loadSellerOrders(silent = false) {
     if (!user || store?.status !== 'Approved') {
       setSellerOrders([])
       return
     }
 
-    setLoadingOrders(true)
+    // A silent reload keeps the list on screen so the page does not jump.
+    if (!silent) setLoadingOrders(true)
 
     try {
       const token = await user.getIdToken()
@@ -511,7 +512,7 @@ export default function Marketplace() {
 
       setMessage(data.message || 'Order updated successfully.')
 
-      await loadSellerOrders()
+      await loadSellerOrders(true)
     } catch (err) {
       console.error('Order update error:', err)
 
@@ -1222,7 +1223,7 @@ export default function Marketplace() {
               </button>
             </div>
 
-            {loadingOrders ? (
+            {loadingOrders && sellerOrders.length === 0 ? (
               <div className="marketplace-loading">
                 <Loader2 className="marketplace-spinner" size={24} />
                 <p>Loading your orders...</p>
