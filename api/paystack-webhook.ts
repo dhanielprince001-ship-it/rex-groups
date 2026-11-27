@@ -254,6 +254,34 @@ export default async function handler(
         { merge: true },
       )
 
+      // Mirror Paystack's progress onto the seller order so the buyer sees it.
+      try {
+        const matches = await db
+          .collection('sellerOrders')
+          .where('lastPaystackRefundId', '==', refundId)
+          .limit(5)
+          .get()
+
+        for (const match of matches.docs) {
+          await match.ref.update({
+            refundProviderStatus: statusMap[event.event],
+            refundProviderUpdatedAt: FieldValue.serverTimestamp(),
+          })
+
+          if (event.event === 'refund.processed') {
+            const order = match.data()
+
+            await sendMail(
+              String(order.customerEmail || ''),
+              'Your refund has been processed',
+              `Hi ${order.customerName || ''},\n\nYour refund for your order from ${order.storeName || 'the seller'} has been processed by our payment provider. It can take a few business days to show in your bank account.\n\nRex Groups`,
+            )
+          }
+        }
+      } catch (error) {
+        console.error('Refund status sync failed:', error)
+      }
+
       return res.status(200).send('Refund event recorded.')
     }
 
