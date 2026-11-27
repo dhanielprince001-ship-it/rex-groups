@@ -1,6 +1,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import DisputeThread from './DisputeThread'
+import './admin-market-tables.css'
 import {
   Activity,
   CircleDollarSign,
