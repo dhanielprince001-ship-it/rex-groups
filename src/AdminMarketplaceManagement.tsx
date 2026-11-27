@@ -96,6 +96,26 @@ export default function AdminMarketplaceManagement() {
     | 'cases'
   >('overview')
 
+  // Lets the admin alert bar jump straight to a tab (e.g. disputed payouts).
+  useEffect(() => {
+    const open = (event: Event) => {
+      const next = (event as CustomEvent<string>).detail
+
+      if (
+        ['overview', 'sellers', 'verification', 'orders', 'payouts', 'transactions', 'cases'].includes(next)
+      ) {
+        setTab(next as typeof tab)
+        document
+          .getElementById('admin-marketplace')
+          ?.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+
+    window.addEventListener('rex-admin-tab', open)
+
+    return () => window.removeEventListener('rex-admin-tab', open)
+  }, [])
+
   const request = useCallback(
     async (
       method: 'GET' | 'PATCH' | 'POST',
@@ -376,7 +396,7 @@ export default function AdminMarketplaceManagement() {
 
   if (loading) {
     return (
-      <section className="admin-market-panel">
+      <section className="admin-market-panel" id="admin-marketplace">
         <p>Loading marketplace management...</p>
       </section>
     )
