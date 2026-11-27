@@ -409,6 +409,22 @@ export default async function handler(
       await batch.commit()
     }
 
+    // GET ?summary=1: small counts for the admin alert bar.
+    if (req.method === 'GET' && req.query.summary === '1') {
+      const disputed = await db
+        .collection('sellerOrders')
+        .where('payoutStatus', '==', 'Disputed')
+        .limit(200)
+        .get()
+
+      return res.status(200).json({
+        disputesOpen: disputed.size,
+        disputesNeedingReply: disputed.docs.filter(
+          (item) => item.data().disputeLastRole !== 'admin',
+        ).length,
+      })
+    }
+
     // GET ?thread=<id>: any dispute conversation.
     if (req.method === 'GET' && typeof req.query.thread === 'string') {
       return res.status(200).json({
