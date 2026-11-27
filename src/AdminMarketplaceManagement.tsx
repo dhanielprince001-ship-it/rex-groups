@@ -1,5 +1,6 @@
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import DisputeThread from './DisputeThread'
 import {
   Activity,
   CircleDollarSign,
@@ -81,6 +82,7 @@ export default function AdminMarketplaceManagement() {
   const [commission, setCommission] = useState('10')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
+  const [threadFor, setThreadFor] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -941,7 +943,7 @@ export default function AdminMarketplaceManagement() {
 
           <p className="admin-market-note">
             Customer money is held until the buyer confirms receipt (or{' '}
-            4 days after the seller marks the order delivered). Pay
+            a few days after the seller marks the order delivered). Pay
             sellers from your Paystack balance once an order is
             &ldquo;Released&rdquo;, then mark it as paid out here.
           </p>
@@ -1008,7 +1010,8 @@ export default function AdminMarketplaceManagement() {
                       const status = state(order)
 
                       return (
-                        <tr key={order.id}>
+                        <Fragment key={order.id}>
+                        <tr>
                           <td>{order.storeName || '—'}</td>
                           <td>
                             {(() => {
@@ -1039,6 +1042,18 @@ export default function AdminMarketplaceManagement() {
                           <td>
                             {status === 'Disputed' &&
                               (order.disputeReason || 'Buyer reported a problem')}
+
+                            {Boolean(order.disputeReason) && (
+                              <button
+                                type="button"
+                                style={{ display: 'block', marginTop: 6 }}
+                                onClick={() =>
+                                  setThreadFor(threadFor === order.id ? '' : order.id)
+                                }
+                              >
+                                {threadFor === order.id ? 'Hide conversation' : 'Open conversation'}
+                              </button>
+                            )}
 
                             {status === 'Held' && order.autoReleaseAt?.seconds
                               ? `Auto-releases ${dateText(order.autoReleaseAt)}`
@@ -1152,6 +1167,22 @@ export default function AdminMarketplaceManagement() {
                             </div>
                           </td>
                         </tr>
+
+                        {threadFor === order.id && (
+                          <tr>
+                            <td colSpan={7}>
+                              <DisputeThread
+                                user={user}
+                                orderId={order.id}
+                                viewer="admin"
+                                url="/api/admin-marketplace"
+                                sendMethod="PATCH"
+                                sendExtra={{ action: 'dispute-message' }}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </tbody>
