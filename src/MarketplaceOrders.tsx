@@ -620,6 +620,12 @@ export default function MarketplaceOrders() {
                                     receipt. Payment has been released to the
                                     seller.
                                   </p>
+                                ) : pack.payoutStatus === 'Refunded' ? (
+                                  <p className="rex-receipt-done">
+                                    <CheckCircle2 size={16} /> This order was
+                                    refunded. It can take a few business days
+                                    to reach your account.
+                                  </p>
                                 ) : pack.payoutStatus === 'Disputed' ? (
                                   <>
                                     <p className="rex-receipt-warn">
