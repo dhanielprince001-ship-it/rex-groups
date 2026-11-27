@@ -1,68 +1,81 @@
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore'
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Search,
-  ShoppingBag,
-  Store,
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Package,
   RefreshCw,
-  Check,
+  ShoppingBag,
+  Truck,
 } from 'lucide-react'
 
-import { db } from './firebase'
-import { useCart } from './CartContext'
+import { useAuth } from './AuthPanel'
 import ThemeToggle from './ThemeToggle'
-import { RatingSummary } from './StoreRatings'
-import VerifiedBadge from './VerifiedBadge'
+import './delivery-confirm.css'
 
-type StoreItem = {
+type Seconds = { seconds?: number } | null
+
+type OrderPackage = {
   id: string
-  ownerId: string
-  name: string
-  description: string
-  category: string
-  logoUrl?: string
-  coverUrl?: string
-  location?: string
+  storeName: string
+  sellerId: string
+  items: {
+    productId: string
+    name: string
+    unitPrice?: number
+    price?: number
+    quantity: number
+    imageUrl?: string
+  }[]
+  subtotal: number
+  deliveryFee?: number
+  deliveryLocation?: string
   status: string
-  ratingAverage?: number
-  ratingCount?: number
-  verified?: boolean
+  paymentStatus: string
+  trackingNumber: string
+  shippingCarrier: string
+  paidAt: Seconds
+  processingAt: Seconds
+  shippedAt: Seconds
+  deliveredAt: Seconds
+  payoutStatus?: string
+  autoReleaseAt?: Seconds
 }
 
-type ProductItem = {
+type BuyerOrder = {
   id: string
-  ownerId: string
+  subtotal: number
+  deliveryFee?: number | null
+  status?: string
+  paymentStatus?: string
+  createdAt: Seconds
+  shippingAddress: {
+    fullName?: string
+    phone?: string
+    streetAddress?: string
+    city?: string
+    state?: string
+    country?: string
+    postalCode?: string
+  } | null
+  packages: OrderPackage[]
+}
+
+type BuyerEnquiry = {
+  id: string
   storeId: string
-  name: string
-  description: string
-  price: number
-  category: string
-  imageUrl: string
+  storeName: string
+  productName: string
+  message: string
   status: string
+  reply: string
+  createdAt: Seconds
+  repliedAt: Seconds
 }
-
-const CATEGORIES = [
-  'All categories',
-  'Fashion',
-  'Electronics',
-  'Phones & Accessories',
-  'Beauty & Personal Care',
-  'Food & Groceries',
-  'Home & Furniture',
-  'Health & Wellness',
-  'Sports & Fitness',
-  'Books & Education',
-  'Other',
-]
 
 const money = new Intl.NumberFormat('en-NG', {
   style: 'currency',
@@ -70,488 +83,692 @@ const money = new Intl.NumberFormat('en-NG', {
   maximumFractionDigits: 0,
 })
 
-export default function MarketplaceHome() {
-  const [stores, setStores] = useState<StoreItem[]>([])
-  const [products, setProducts] = useState<ProductItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('All categories')
-  const [addedProduct, setAddedProduct] = useState('')
+const STEPS = [
+  'Order placed',
+  'Payment confirmed',
+  'Processing',
+  'Shipped',
+  'Delivered',
+]
 
-  const { addItem, itemCount } = useCart()
+const PROGRESS: Record<string, number> = {
+  'Awaiting Payment': 1,
+  'Awaiting Fulfilment': 2,
+  Processing: 3,
+  Shipped: 4,
+  Delivered: 5,
+}
+
+function formatDate(value: Seconds) {
+  return value?.seconds
+    ? new Date(value.seconds * 1000).toLocaleString()
+    : 'Date unavailable'
+}
+
+function stepDate(value: Seconds) {
+  return value?.seconds
+    ? new Date(value.seconds * 1000).toLocaleDateString()
+    : ''
+}
+
+async function readJson(response: Response) {
+  try {
+    return (await response.json()) as Record<string, unknown>
+  } catch {
+    return {} as Record<string, unknown>
+  }
+}
+
+function paymentClass(status: string | undefined) {
+  if (status === 'Paid') return 'paid'
+  if (status === 'Partially Paid') return 'partial'
+
+  return 'unpaid'
+}
+
+function Header({ right }: { right: ReactNode }) {
+  return (
+    <header className="rex-market-header">
+      <Link className="rex-market-brand" to="/marketplace">
+        <span className="rex-market-brand-mark">R<span>.</span></span>
+        <span>REX <b>MARKETPLACE</b></span>
+      </Link>
+
+      {right}
+
+      <ThemeToggle />
+    </header>
+  )
+}
+
+export default function MarketplaceOrders() {
+  const { user, ready } = useAuth()
+
+  const [tab, setTab] = useState<'orders' | 'enquiries'>('orders')
+  const [orders, setOrders] = useState<BuyerOrder[]>([])
+  const [enquiries, setEnquiries] = useState<BuyerEnquiry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    if (!user) return
+
+    setLoading(true)
+    setError('')
+
+    try {
+      const token = await user.getIdToken()
+      const headers = { Authorization: `Bearer ${token}` }
+
+      const [orderResponse, enquiryResponse] = await Promise.all([
+        fetch('/api/my-orders', { headers, cache: 'no-store' }),
+        fetch('/api/seller-enquiries?role=buyer', {
+          headers,
+          cache: 'no-store',
+        }),
+      ])
+
+      const orderData = await readJson(orderResponse)
+      const enquiryData = await readJson(enquiryResponse)
+
+      if (!orderResponse.ok) {
+        throw new Error(
+          typeof orderData.error === 'string'
+            ? orderData.error
+            : 'Unable to load your orders.',
+        )
+      }
+
+      setOrders(
+        Array.isArray(orderData.orders)
+          ? (orderData.orders as BuyerOrder[])
+          : [],
+      )
+
+      setEnquiries(
+        enquiryResponse.ok && Array.isArray(enquiryData.enquiries)
+          ? (enquiryData.enquiries as BuyerEnquiry[])
+          : [],
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Unable to load your orders.',
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
 
   useEffect(() => {
-    let active = true
+    void load()
+  }, [load])
 
-    async function loadMarketplace() {
-      if (!db) {
-        setLoadError('The marketplace is temporarily unavailable.')
-        setLoading(false)
-        return
-      }
+  const [actionBusy, setActionBusy] = useState('')
+  const [disputeFor, setDisputeFor] = useState('')
+  const [disputeText, setDisputeText] = useState('')
+  const [actionMsg, setActionMsg] = useState('')
 
-      setLoading(true)
-      setLoadError('')
+  async function respond(packId: string, action: 'confirm' | 'dispute') {
+    if (!user) return
 
-      try {
-        const [storeSnapshot, productSnapshot] = await Promise.all([
-          getDocs(
-            query(
-              collection(db, 'stores'),
-              where('status', '==', 'Approved'),
-            ),
-          ),
-          getDocs(
-            query(
-              collection(db, 'products'),
-              where('status', '==', 'Approved'),
-            ),
-          ),
-        ])
-
-        if (!active) return
-
-        const storeItems = storeSnapshot.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        })) as StoreItem[]
-
-        const productItems = productSnapshot.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        })) as ProductItem[]
-
-        setStores(storeItems)
-        setProducts(productItems)
-      } catch (error) {
-        console.error('Marketplace loading error:', error)
-
-        if (active) {
-          setLoadError(
-            'We could not load marketplace listings. Please check the marketplace database permissions and try again.',
-          )
-        }
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-
-    void loadMarketplace()
-
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const storeById = useMemo(
-    () => new Map(stores.map((store) => [store.id, store])),
-    [stores],
-  )
-
-  const filteredProducts = useMemo(() => {
-    const term = search.trim().toLowerCase()
-
-    return products.filter((product) => {
-      const store = storeById.get(product.storeId)
-
-      const matchesCategory =
-        category === 'All categories' ||
-        product.category === category
-
-      const matchesSearch =
-        !term ||
-        (product.name || '').toLowerCase().includes(term) ||
-        (product.description || '').toLowerCase().includes(term) ||
-        (product.category || '').toLowerCase().includes(term) ||
-        (store?.name || '').toLowerCase().includes(term)
-
-      return matchesCategory && matchesSearch && Boolean(store)
-    })
-  }, [products, search, category, storeById])
-
-  const filteredStores = useMemo(() => {
-    const term = search.trim().toLowerCase()
-
-    return stores.filter((store) => {
-      const matchesCategory =
-        category === 'All categories' ||
-        store.category === category
-
-      const matchesSearch =
-        !term ||
-        (store.name || '').toLowerCase().includes(term) ||
-        (store.description || '').toLowerCase().includes(term) ||
-        (store.category || '').toLowerCase().includes(term) ||
-        (store.location || '').toLowerCase().includes(term)
-
-      return matchesCategory && matchesSearch
-    })
-  }, [stores, search, category])
-
-  function handleAddToCart(product: ProductItem, store: StoreItem) {
-    addItem({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      imageUrl: product.imageUrl || '',
-      storeId: product.storeId,
-      storeName: store.name,
-    })
-
-    setAddedProduct(product.id)
-
-    window.setTimeout(() => {
-      setAddedProduct((current) =>
-        current === product.id ? '' : current,
+    if (
+      action === 'confirm' &&
+      !window.confirm(
+        'Confirm you received this package? Payment will then be released to the seller.',
       )
-    }, 1500)
+    ) {
+      return
+    }
+
+    setActionBusy(packId)
+    setActionMsg('')
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/my-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sellerOrderId: packId,
+          action,
+          reason: disputeText,
+        }),
+      })
+
+      const data = await readJson(response)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Could not update this order.',
+        )
+      }
+
+      setDisputeFor('')
+      setDisputeText('')
+      setActionMsg(
+        action === 'confirm'
+          ? 'Thank you! Payment will now be released to the seller.'
+          : 'Your report was sent. Our team will review it and contact you.',
+      )
+
+      await load()
+    } catch (err) {
+      setActionMsg(
+        err instanceof Error ? err.message : 'Could not update this order.',
+      )
+    } finally {
+      setActionBusy('')
+    }
+  }
+
+  if (!ready) {
+    return (
+      <main className="rex-marketplace">
+        <div className="rex-checkout-message">
+          <Loader2 className="marketplace-spinner" size={28} />
+          <p>Checking your account...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (!user) {
+    return (
+      <main className="rex-marketplace">
+        <Header right={<Link to="/marketplace">Back to marketplace</Link>} />
+
+        <section className="rex-checkout-message">
+          <ShoppingBag size={38} />
+          <h1>Sign in to track your orders.</h1>
+          <p>Your orders and seller replies are linked to your account.</p>
+          <Link
+            className="rex-market-primary-link"
+            to="/?returnTo=%2Fmarketplace%2Forders#account"
+          >
+            Sign in or register
+          </Link>
+        </section>
+      </main>
+    )
   }
 
   return (
-    <div className="rex-marketplace">
-      <header className="rex-market-header">
-        <Link
-          className="rex-market-brand"
-          to="/marketplace"
-          aria-label="Rex Groups Marketplace home"
-        >
-          <span className="rex-market-brand-mark">
-            R<span>.</span>
-          </span>
-          <span>REX <b>MARKETPLACE</b></span>
+    <main className="rex-marketplace rex-orders-page">
+      <Header right={<Link to="/marketplace">Continue shopping</Link>} />
+
+      <section className="rex-cart-content">
+        <Link className="rex-cart-back" to="/marketplace">
+          <ArrowLeft size={16} /> Back to marketplace
         </Link>
 
-        <nav className="rex-market-nav" aria-label="Marketplace navigation">
-          <a href="#market-products">Shop products</a>
-          <a href="#market-stores">Explore stores</a>
-          <Link to="/marketplace/orders">My orders</Link>
-          <Link to="/">Rex Groups</Link>
+        <div className="rex-cart-heading">
+          <div>
+            <span className="rex-market-eyebrow">TRACK YOUR GOODS</span>
+            <h1>My <em>orders.</em></h1>
+          </div>
 
-          <Link
-            className="rex-market-cart-link"
-            to="/marketplace/cart"
-            aria-label={`Shopping cart, ${itemCount} items`}
+          <button
+            type="button"
+            className="rex-orders-refresh"
+            onClick={() => void load()}
+            disabled={loading}
           >
-            <ShoppingBag size={18} />
-            <span>Cart</span>
-            <b>{itemCount}</b>
-          </Link>
+            {loading ? (
+              <Loader2 className="marketplace-spinner" size={16} />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            Refresh
+          </button>
+        </div>
 
-          <Link
-            className="rex-market-sell-link"
-            to="/marketplace/seller"
+        <div className="rex-orders-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'orders'}
+            className={tab === 'orders' ? 'active' : ''}
+            onClick={() => setTab('orders')}
           >
-            Start selling <ArrowUpRight size={16} />
-          </Link>
-        </nav>
-        <ThemeToggle />
-      </header>
+            <Package size={16} /> Orders ({orders.length})
+          </button>
 
-      <main>
-        <section className="rex-market-hero">
-          <div className="rex-market-hero-inner">
-            <span className="rex-market-eyebrow">
-              A MARKETPLACE BY REX GROUPS
-            </span>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'enquiries'}
+            className={tab === 'enquiries' ? 'active' : ''}
+            onClick={() => setTab('enquiries')}
+          >
+            <MessageSquare size={16} /> My enquiries ({enquiries.length})
+          </button>
+        </div>
 
-            <h1>
-              Discover something<br />
-              <em>worth finding.</em>
-            </h1>
-
-            <p>
-              Shop products from approved independent Nigerian businesses.
-              Discover new stores, support local sellers and shop from wherever you are.
-            </p>
-
-            <div className="rex-market-search" role="search">
-              <Search size={19} aria-hidden="true" />
-
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search products, stores or categories"
-                aria-label="Search products, stores or categories"
-              />
-
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                aria-label="Filter by category"
-              >
-                {CATEGORIES.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="rex-market-hero-foot">
-              <span><i /> Nigerian sellers</span>
-              <span>Independent businesses</span>
-              <span>Admin-reviewed listings</span>
-            </div>
+        {error && (
+          <div className="marketplace-error" role="alert">
+            {error}
           </div>
+        )}
 
-          <div className="rex-market-hero-art" aria-hidden="true">
-            <div className="market-art-card market-art-one">
-              <ShoppingBag size={34} />
-              <span>DISCOVER</span>
-            </div>
-
-            <div className="market-art-card market-art-two">
-              <Store size={31} />
-              <span>SHOP LOCAL</span>
-            </div>
-
-            <div className="market-art-orbit" />
-            <b>RG.</b>
+        {loading && orders.length === 0 && enquiries.length === 0 ? (
+          <div className="rex-market-state">
+            <RefreshCw className="rex-market-spin" />
+            Loading your orders…
           </div>
-        </section>
-
-        <section className="rex-market-trust">
-          <span>BUILT FOR BUYERS</span>
-          <span>MADE FOR SELLERS</span>
-          <span>GROWING WITH BUSINESSES</span>
-        </section>
-
-        <section className="rex-market-section" id="market-products">
-          <div className="rex-market-section-heading">
-            <div>
-              <span className="rex-market-eyebrow">
-                THE MARKETPLACE
-              </span>
-
-              <h2>
-                Products to <em>explore.</em>
-              </h2>
-
-              <p>
-                Discover products from stores approved by Rex Groups.
-              </p>
-            </div>
-
-            <span className="rex-market-count">
-              {filteredProducts.length} LISTINGS
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="rex-market-state">
-              <RefreshCw className="rex-market-spin" />
-              Loading approved products and stores…
-            </div>
-          ) : loadError ? (
-            <div className="rex-market-state rex-market-error">
-              {loadError}
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="rex-market-empty">
-              <ShoppingBag size={28} />
-              <h3>New discoveries are on the way.</h3>
-              <p>
-                There are no approved products matching this search yet.
-                Try another category or check back soon.
-              </p>
+        ) : tab === 'orders' ? (
+          orders.length === 0 ? (
+            <div className="rex-cart-empty">
+              <ShoppingBag size={42} />
+              <h2>No orders yet.</h2>
+              <p>When you place an order, you can follow it here.</p>
+              <Link className="rex-market-primary-link" to="/marketplace">
+                Explore products
+              </Link>
             </div>
           ) : (
-            <div className="rex-market-product-grid">
-              {filteredProducts.map((product) => {
-                const store = storeById.get(product.storeId)
-
-                if (!store) return null
-
-                const isAdded = addedProduct === product.id
+            <div className="rex-orders-list">
+              {orders.map((order) => {
+                const deliveryFee = order.deliveryFee
+                const total = order.subtotal +
+                  (typeof deliveryFee === 'number' ? deliveryFee : 0)
 
                 return (
-                  <article
-                    className="rex-market-product-card"
-                    key={product.id}
-                  >
-                    <Link
-                      to={`/marketplace/product/${product.id}`}
-                      className="rex-market-product-image"
-                    >
-                      {product.imageUrl ? (
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <ShoppingBag size={35} />
-                      )}
-                    </Link>
+                  <article className="rex-order" key={order.id}>
+                    <div className="rex-order-top">
+                      <div>
+                        <span className="rex-market-eyebrow">ORDER REFERENCE</span>
+                        <h3>{order.id}</h3>
+                        <small>Placed {formatDate(order.createdAt)}</small>
+                      </div>
 
-                    <div className="rex-market-product-info">
-                      <span>{product.category}</span>
-
-                      <h3>
-                        <Link to={`/marketplace/product/${product.id}`}>
-                          {product.name}
-                        </Link>
-                      </h3>
-
-                      <p className="rex-market-product-store">
-                        {store.name}
-                      </p>
-
-                      <strong>
-                        {money.format(product.price)}
-                      </strong>
-
-                      <button
-                        className={`rex-market-add-cart ${isAdded ? 'is-added' : ''}`}
-                        type="button"
-                        onClick={() => handleAddToCart(product, store)}
-                      >
-                        {isAdded ? (
-                          <>
-                            <Check size={17} />
-                            Added to cart
-                          </>
-                        ) : (
-                          <>
-                            <ShoppingBag size={17} />
-                            Add to cart
-                          </>
-                        )}
-                      </button>
+                      <strong>{money.format(total)}</strong>
                     </div>
+
+                    <div className="rex-order-badges">
+                      <span className="rex-package-status">
+                        {order.status || 'Awaiting Payment'}
+                      </span>
+                      <span
+                        className={`rex-pay-badge ${paymentClass(order.paymentStatus)}`}
+                      >
+                        Payment: {order.paymentStatus || 'Unpaid'}
+                      </span>
+                    </div>
+
+                    <div className="rex-order-total">
+                      <div>
+                        <span>Products subtotal</span>
+                        <strong>{money.format(order.subtotal)}</strong>
+                      </div>
+
+                      <div>
+                        <span>Delivery fee</span>
+                        <strong>
+                          {typeof deliveryFee === 'number'
+                            ? money.format(deliveryFee)
+                            : 'Not yet calculated'}
+                        </strong>
+                      </div>
+
+                      <div className="rex-order-grand-total">
+                        <span>Order total</span>
+                        <strong>{money.format(total)}</strong>
+                      </div>
+                    </div>
+
+                    {order.shippingAddress && (
+                      <div className="rex-delivery">
+                        <MapPin size={16} />
+                        <div>
+                          <strong>Delivering to</strong>
+                          <p>
+                            {[
+                              order.shippingAddress.fullName,
+                              order.shippingAddress.streetAddress,
+                              order.shippingAddress.city,
+                              order.shippingAddress.state,
+                              order.shippingAddress.postalCode,
+                              order.shippingAddress.country,
+                            ]
+                              .filter(Boolean)
+                              .join(', ')}
+                          </p>
+                          {order.shippingAddress.phone && (
+                            <small>Phone: {order.shippingAddress.phone}</small>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {order.packages.length === 0 && (
+                      <p className="rex-order-note">
+                        Your order is being prepared. Check back shortly.
+                      </p>
+                    )}
+
+                    {order.packages.map((pack) => {
+                      const done = PROGRESS[pack.status] ?? 1
+
+                      const stepDates = [
+                        stepDate(order.createdAt),
+                        stepDate(pack.paidAt),
+                        stepDate(pack.processingAt),
+                        stepDate(pack.shippedAt),
+                        stepDate(pack.deliveredAt),
+                      ]
+
+                      return (
+                        <div className="rex-package" key={pack.id}>
+                          <div className="rex-package-head">
+                            <strong>{pack.storeName}</strong>
+                            <span className="rex-package-status">
+                              {pack.status}
+                            </span>
+                          </div>
+
+                          <p className="rex-package-pay">
+                            <span
+                              className={`rex-pay-badge ${paymentClass(pack.paymentStatus)}`}
+                            >
+                              {pack.paymentStatus === 'Paid'
+                                ? 'Paid'
+                                : pack.paymentStatus || 'Unpaid'}
+                            </span>
+
+                            {pack.paidAt?.seconds ? (
+                              <small>Confirmed {formatDate(pack.paidAt)}</small>
+                            ) : null}
+
+                            <b>{money.format(pack.subtotal)}</b>
+                          </p>
+
+                          {(pack.deliveryFee ?? 0) > 0 || pack.deliveryLocation ? (
+                            <p className="rex-package-delivery">
+                              Delivery
+                              {pack.deliveryLocation
+                                ? ` to ${pack.deliveryLocation}`
+                                : ''}
+                              :{' '}
+                              <b>
+                                {(pack.deliveryFee ?? 0) > 0
+                                  ? money.format(pack.deliveryFee ?? 0)
+                                  : 'Free'}
+                              </b>
+                            </p>
+                          ) : null}
+
+                          {pack.status === 'Delivered' && pack.sellerId && (
+                            <Link
+                              className="rex-package-rate"
+                              to={`/marketplace/store/${pack.sellerId}#reviews`}
+                            >
+                              Rate this store
+                            </Link>
+                          )}
+
+                          <ul className="rex-package-items">
+                            {pack.items.map((item, index) => (
+                              <li key={`${item.productId}-${index}`}>
+                                {item.imageUrl ? (
+                                  <img src={item.imageUrl} alt="" />
+                                ) : (
+                                  <ShoppingBag size={18} />
+                                )}
+
+                                <span>
+                                  {item.name} × {item.quantity}
+                                </span>
+
+                                <b>
+                                  {money.format(
+                                    (item.unitPrice ?? item.price ?? 0) *
+                                      item.quantity,
+                                  )}
+                                </b>
+                              </li>
+                            ))}
+                          </ul>
+
+                          <ol className="rex-tracker" aria-label="Order progress">
+                            {STEPS.map((step, index) => (
+                              <li
+                                key={step}
+                                className={
+                                  index < done
+                                    ? index === done - 1
+                                      ? 'done current'
+                                      : 'done'
+                                    : ''
+                                }
+                              >
+                                <i>
+                                  {index < done ? (
+                                    <CheckCircle2 size={16} />
+                                  ) : (
+                                    index + 1
+                                  )}
+                                </i>
+
+                                <span>{step}</span>
+
+                                {index < done && stepDates[index] && (
+                                  <small>{stepDates[index]}</small>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+
+                          {pack.paymentStatus !== 'Paid' && (
+                            <p className="rex-order-note">
+                              Waiting for secure payment confirmation. Your
+                              order will move to fulfilment once payment is
+                              verified. If you have completed payment, refresh
+                              this page shortly.
+                            </p>
+                          )}
+
+                          {pack.paymentStatus === 'Paid' &&
+                            pack.status === 'Awaiting Fulfilment' && (
+                              <p className="rex-order-note">
+                                Payment confirmed. Your order is waiting for
+                                the store to begin processing.
+                              </p>
+                            )}
+
+                          {pack.trackingNumber && (
+                            <p className="rex-tracking">
+                              <Truck size={16} />
+                              Tracking number:{' '}
+                              <strong>{pack.trackingNumber}</strong>
+
+                              {pack.shippingCarrier && (
+                                <>
+                                  {' '}· Carrier:{' '}
+                                  <strong>{pack.shippingCarrier}</strong>
+                                </>
+                              )}
+                            </p>
+                          )}
+
+                          {pack.shippedAt?.seconds &&
+                            !pack.deliveredAt?.seconds && (
+                              <p className="rex-order-note">
+                                Shipped {formatDate(pack.shippedAt)}
+                              </p>
+                            )}
+
+                          {pack.deliveredAt?.seconds && (
+                            <p className="rex-order-note">
+                              Delivered {formatDate(pack.deliveredAt)}
+                            </p>
+                          )}
+
+                          {pack.paymentStatus === 'Paid' &&
+                            (pack.status === 'Shipped' ||
+                              pack.status === 'Delivered') && (
+                              <div className="rex-receipt">
+                                {pack.payoutStatus === 'Released' ? (
+                                  <p className="rex-receipt-done">
+                                    <CheckCircle2 size={16} /> You confirmed
+                                    receipt. Payment has been released to the
+                                    seller.
+                                  </p>
+                                ) : pack.payoutStatus === 'Disputed' ? (
+                                  <p className="rex-receipt-warn">
+                                    You reported a problem. Payment is on hold
+                                    while our team reviews it.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <strong>
+                                      Have you received this package?
+                                    </strong>
+                                    <p>
+                                      The seller is only paid after you confirm
+                                      {pack.autoReleaseAt?.seconds
+                                        ? `, or automatically on ${new Date(
+                                            pack.autoReleaseAt.seconds * 1000,
+                                          ).toLocaleDateString()} if you report no problem`
+                                        : ''}
+                                      .
+                                    </p>
+
+                                    {disputeFor === pack.id ? (
+                                      <div className="rex-receipt-form">
+                                        <textarea
+                                          rows={3}
+                                          maxLength={500}
+                                          value={disputeText}
+                                          onChange={(e) =>
+                                            setDisputeText(e.target.value)
+                                          }
+                                          placeholder="Describe the problem (not received, damaged, wrong item...)"
+                                          aria-label="Describe the problem"
+                                        />
+                                        <div className="rex-receipt-actions">
+                                          <button
+                                            type="button"
+                                            className="rex-receipt-danger"
+                                            disabled={
+                                              actionBusy === pack.id ||
+                                              disputeText.trim().length < 10
+                                            }
+                                            onClick={() =>
+                                              void respond(pack.id, 'dispute')
+                                            }
+                                          >
+                                            {actionBusy === pack.id
+                                              ? 'Sending...'
+                                              : 'Send report'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDisputeFor('')}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="rex-receipt-actions">
+                                        <button
+                                          type="button"
+                                          className="rex-receipt-yes"
+                                          disabled={actionBusy === pack.id}
+                                          onClick={() =>
+                                            void respond(pack.id, 'confirm')
+                                          }
+                                        >
+                                          {actionBusy === pack.id
+                                            ? 'Please wait...'
+                                            : 'Yes, I received it'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={actionBusy === pack.id}
+                                          onClick={() => {
+                                            setDisputeFor(pack.id)
+                                            setActionMsg('')
+                                          }}
+                                        >
+                                          Report a problem
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+
+                                {actionMsg && (
+                                  <p className="rex-receipt-msg" role="status">
+                                    {actionMsg}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                          <Link
+                            className="rex-order-contact"
+                            to={`/marketplace/store/${pack.sellerId}`}
+                          >
+                            Ask {pack.storeName} a question
+                          </Link>
+                        </div>
+                      )
+                    })}
                   </article>
                 )
               })}
             </div>
-          )}
-        </section>
-
-        <section
-          className="rex-market-section rex-market-stores-section"
-          id="market-stores"
-        >
-          <div className="rex-market-section-heading">
-            <div>
-              <span className="rex-market-eyebrow">
-                SELLER COMMUNITY
-              </span>
-
-              <h2>
-                Meet the <em>stores.</em>
-              </h2>
-
-              <p>
-                Browse independent businesses that have passed store review.
-              </p>
-            </div>
-
-            <Link
-              className="rex-market-text-link"
-              to="/marketplace/seller"
-            >
-              Open a store <ArrowRight size={17} />
+          )
+        ) : enquiries.length === 0 ? (
+          <div className="rex-cart-empty">
+            <MessageSquare size={42} />
+            <h2>No enquiries yet.</h2>
+            <p>Questions you send to stores and their replies appear here.</p>
+            <Link className="rex-market-primary-link" to="/marketplace">
+              Browse stores
             </Link>
           </div>
-
-          {!loading && !loadError && filteredStores.length > 0 ? (
-            <div className="rex-market-store-grid">
-              {filteredStores.map((store) => (
-                <article
-                  className="rex-market-store-card"
-                  key={store.id}
-                >
-                  <div className="rex-market-store-cover">
-                    {store.coverUrl && (
-                      <img
-                        src={store.coverUrl}
-                        alt=""
-                        loading="lazy"
-                      />
-                    )}
-
-                    <div className="rex-market-store-logo">
-                      {store.logoUrl ? (
-                        <img
-                          src={store.logoUrl}
-                          alt={`${store.name} logo`}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <Store size={25} />
-                      )}
-                    </div>
+        ) : (
+          <div className="rex-orders-list">
+            {enquiries.map((item) => (
+              <article className="rex-order" key={item.id}>
+                <div className="rex-order-top">
+                  <div>
+                    <span className="rex-market-eyebrow">
+                      {item.storeName.toUpperCase()}
+                    </span>
+                    <h3>{item.productName || 'General question'}</h3>
+                    <small>Sent {formatDate(item.createdAt)}</small>
                   </div>
 
-                  <div className="rex-market-store-info">
-                    <span>{store.category}</span>
-                    <h3>{store.name}</h3>
-                    <p>{store.description}</p>
-                    <small>{store.location || 'Nigeria'}</small>
+                  <span className="rex-package-status">{item.status}</span>
+                </div>
 
-                    {store.verified === true && <VerifiedBadge />}
+                <p className="rex-enquiry-message">{item.message}</p>
 
-                    <RatingSummary
-                      average={store.ratingAverage}
-                      count={store.ratingCount}
-                    />
-
-                    <Link to={`/marketplace/store/${store.id}`}>
-                      Visit store <ArrowUpRight size={16} />
-                    </Link>
+                {item.reply ? (
+                  <div className="rex-enquiry-reply">
+                    <strong>{item.storeName} replied</strong>
+                    <p>{item.reply}</p>
+                    <small>{formatDate(item.repliedAt)}</small>
                   </div>
-                </article>
-              ))}
-            </div>
-          ) : !loading && !loadError ? (
-            <div className="rex-market-empty rex-market-empty-small">
-              <Store size={25} />
-              <p>
-                Approved stores will appear here as sellers join the marketplace.
-              </p>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rex-market-seller-cta">
-          <div>
-            <span className="rex-market-eyebrow">
-              GROW YOUR BUSINESS
-            </span>
-
-            <h2>
-              Have products to sell?<br />
-              <em>Open your store.</em>
-            </h2>
-
-            <p>
-              Apply to become a Rex Groups Marketplace seller.
-              Every store is reviewed before it goes live.
-            </p>
+                ) : (
+                  <p className="rex-order-note">
+                    Waiting for the seller to reply.
+                  </p>
+                )}
+              </article>
+            ))}
           </div>
-
-          <Link to="/marketplace/seller">
-            Become a seller <ArrowUpRight size={18} />
-          </Link>
-        </section>
-      </main>
-
-      <footer className="rex-market-footer">
-        <Link className="rex-market-brand" to="/marketplace">
-          <span className="rex-market-brand-mark">
-            R<span>.</span>
-          </span>
-          <span>REX <b>MARKETPLACE</b></span>
-        </Link>
-
-        <span>
-          © {new Date().getFullYear()} Rex Groups Marketplace
-        </span>
-
-        <Link to="/">
-          Visit Rex Groups <ArrowUpRight size={15} />
-        </Link>
-      </footer>
-    </div>
+        )}
+      </section>
+    </main>
   )
 }
