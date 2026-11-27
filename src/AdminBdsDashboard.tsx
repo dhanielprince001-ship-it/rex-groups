@@ -7,9 +7,10 @@ import { db } from './firebase'
 import { useAuth } from './AuthPanel'
 import { bdsApi } from './bds/api'
 import { SERVICES } from './bds/catalog'
+import AdminQuotePanel from './bds/AdminQuotePanel'
 import { BarChart, BarLegend, LineChart } from './bds/charts'
 import {
-  ADMIN_UID, STATUSES, fmtDate, fmtDateTime, statusClass, toDate,
+  ADMIN_UID, STATUSES, fmtDate, fmtDateTime, naira, statusClass, toDate,
   type BdsActivity, type BdsClientRecord, type BdsMessage, type BdsRequest, type BdsServiceOverride, type BdsUpdate, type RequestStatus, type ServiceId,
 } from './bds/types'
 import './bds.css'
@@ -187,6 +188,8 @@ function AdminDetail({ request }: { request: BdsRequest }) {
         <button className="button bds-ghost" disabled={!!busy} onClick={() => void run('assign', 'assign', { assignee }, 'Assignment saved.')}>Save</button>
       </div>
 
+      <AdminQuotePanel request={request} user={user} />
+
       <h4>Progress update</h4>
       <label className="bds-muted">Progress: {progress}%<input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => setProgress(Number(e.target.value))} /></label>
       <textarea rows={2} maxLength={1000} value={updateText} onChange={(e) => setUpdateText(e.target.value)} placeholder="What has been done? Visible to the client." aria-label="Progress update text" />
@@ -337,6 +340,9 @@ function AnalyticsTab({ requests }: { requests: BdsRequest[] }) {
     ? Math.round(completed.reduce((n, r) => n + ((toDate(r.updatedAt)?.getTime() ?? 0) - (toDate(r.createdAt)?.getTime() ?? 0)) / 86_400_000, 0) / completed.length)
     : 0
   const clients = new Set(filtered.map((r) => r.clientId)).size
+  const quoted = filtered.reduce((n, r) => n + (r.quote && r.quote.status !== 'Declined' ? r.quote.amount : 0), 0)
+  const acceptedValue = filtered.reduce((n, r) => n + (r.quote?.status === 'Accepted' ? r.quote.amount : 0), 0)
+  const collected = filtered.reduce((n, r) => n + (r.payment?.paid ?? 0), 0)
 
   function download() {
     const esc = (v: unknown) => {
@@ -344,8 +350,8 @@ function AnalyticsTab({ requests }: { requests: BdsRequest[] }) {
       if (/^[=+\-@]/.test(s)) s = `'${s}` // neutralise spreadsheet formula injection
       return `"${s}"`
     }
-    const head = ['Title', 'Client', 'Email', 'Company', 'Services', 'Status', 'Progress %', 'Budget', 'Timeline', 'Assignee', 'Created']
-    const lines = filtered.map((r) => [r.title, r.clientName, r.clientEmail, r.company, r.services.join('; '), r.status, r.progress, r.budget, r.timeline, r.assignee, toDate(r.createdAt)?.toISOString() ?? ''].map(esc).join(','))
+    const head = ['Title', 'Client', 'Email', 'Company', 'Services', 'Status', 'Progress %', 'Budget', 'Timeline', 'Assignee', 'Quote (NGN)', 'Quote status', 'Paid (NGN)', 'Created']
+    const lines = filtered.map((r) => [r.title, r.clientName, r.clientEmail, r.company, r.services.join('; '), r.status, r.progress, r.budget, r.timeline, r.assignee, r.quote?.amount ?? '', r.quote?.status ?? '', r.payment?.paid ?? '', toDate(r.createdAt)?.toISOString() ?? ''].map(esc).join(','))
     const blob = new Blob([[head.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -370,6 +376,9 @@ function AnalyticsTab({ requests }: { requests: BdsRequest[] }) {
         <div><span>Completed</span><strong>{completed.length}</strong></div>
         <div><span>Approval rate</span><strong>{approvalRate}%</strong></div>
         <div><span>Avg. days to complete</span><strong>{avgDays}</strong></div>
+        <div><span>Quoted</span><strong>{naira(quoted)}</strong></div>
+        <div><span>Accepted</span><strong>{naira(acceptedValue)}</strong></div>
+        <div><span>Collected</span><strong>{naira(collected)}</strong></div>
       </div>
       <div className="bds-grid2">
         <div className="bds-panel"><h4>Requests over time</h4><LineChart data={trend} /></div>
