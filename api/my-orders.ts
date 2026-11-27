@@ -422,7 +422,9 @@ export default async function handler(
         deliveredAt: toSeconds(data.deliveredAt),
         updatedAt: toSeconds(data.updatedAt),
         payoutStatus:
-          data.payoutStatus === 'Disputed'
+          data.refundStatus === 'Refunded' || data.payoutStatus === 'Cancelled'
+            ? 'Refunded'
+            : data.payoutStatus === 'Disputed'
             ? 'Disputed'
             : ['Released', 'Paid Out'].includes(data.payoutStatus)
               ? 'Released'
