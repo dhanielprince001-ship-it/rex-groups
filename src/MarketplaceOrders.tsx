@@ -15,6 +15,7 @@ import {
 
 import { useAuth } from './AuthPanel'
 import ThemeToggle from './ThemeToggle'
+import './delivery-confirm.css'
 
 type Seconds = { seconds?: number } | null
 
@@ -41,6 +42,8 @@ type OrderPackage = {
   processingAt: Seconds
   shippedAt: Seconds
   deliveredAt: Seconds
+  payoutStatus?: string
+  autoReleaseAt?: Seconds
 }
 
 type BuyerOrder = {
@@ -126,10 +129,10 @@ function paymentClass(status: string | undefined) {
 function Header({ right }: { right: ReactNode }) {
   return (
     <header className="rex-market-header">
-      <Link className="rex-market-brand" to="/marketplace">
+      <a className="rex-market-brand" href="/marketplace">
         <span className="rex-market-brand-mark">R<span>.</span></span>
         <span>REX <b>MARKETPLACE</b></span>
-      </Link>
+      </a>
 
       {right}
 
@@ -200,6 +203,70 @@ export default function MarketplaceOrders() {
     void load()
   }, [load])
 
+  const [actionBusy, setActionBusy] = useState('')
+  const [disputeFor, setDisputeFor] = useState('')
+  const [disputeText, setDisputeText] = useState('')
+  const [actionMsg, setActionMsg] = useState('')
+
+  async function respond(packId: string, action: 'confirm' | 'dispute') {
+    if (!user) return
+
+    if (
+      action === 'confirm' &&
+      !window.confirm(
+        'Confirm you received this package? Payment will then be released to the seller.',
+      )
+    ) {
+      return
+    }
+
+    setActionBusy(packId)
+    setActionMsg('')
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/my-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sellerOrderId: packId,
+          action,
+          reason: disputeText,
+        }),
+      })
+
+      const data = await readJson(response)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Could not update this order.',
+        )
+      }
+
+      setDisputeFor('')
+      setDisputeText('')
+      setActionMsg(
+        action === 'confirm'
+          ? 'Thank you! Payment will now be released to the seller.'
+          : 'Your report was sent. Our team will review it and contact you.',
+      )
+
+      await load()
+    } catch (err) {
+      setActionMsg(
+        err instanceof Error ? err.message : 'Could not update this order.',
+      )
+    } finally {
+      setActionBusy('')
+    }
+  }
+
   if (!ready) {
     return (
       <main className="rex-marketplace">
@@ -214,7 +281,7 @@ export default function MarketplaceOrders() {
   if (!user) {
     return (
       <main className="rex-marketplace">
-        <Header right={<Link to="/marketplace">Back to marketplace</Link>} />
+        <Header right={<a href="/marketplace">Back to marketplace</a>} />
 
         <section className="rex-checkout-message">
           <ShoppingBag size={38} />
@@ -233,12 +300,12 @@ export default function MarketplaceOrders() {
 
   return (
     <main className="rex-marketplace rex-orders-page">
-      <Header right={<Link to="/marketplace">Continue shopping</Link>} />
+      <Header right={<a href="/marketplace">Continue shopping</a>} />
 
       <section className="rex-cart-content">
-        <Link className="rex-cart-back" to="/marketplace">
+        <a className="rex-cart-back" href="/marketplace">
           <ArrowLeft size={16} /> Back to marketplace
-        </Link>
+        </a>
 
         <div className="rex-cart-heading">
           <div>
@@ -300,9 +367,9 @@ export default function MarketplaceOrders() {
               <ShoppingBag size={42} />
               <h2>No orders yet.</h2>
               <p>When you place an order, you can follow it here.</p>
-              <Link className="rex-market-primary-link" to="/marketplace">
+              <a className="rex-market-primary-link" href="/marketplace">
                 Explore products
-              </Link>
+              </a>
             </div>
           ) : (
             <div className="rex-orders-list">
@@ -542,6 +609,109 @@ export default function MarketplaceOrders() {
                             </p>
                           )}
 
+                          {pack.paymentStatus === 'Paid' &&
+                            (pack.status === 'Shipped' ||
+                              pack.status === 'Delivered') && (
+                              <div className="rex-receipt">
+                                {pack.payoutStatus === 'Released' ? (
+                                  <p className="rex-receipt-done">
+                                    <CheckCircle2 size={16} /> You confirmed
+                                    receipt. Payment has been released to the
+                                    seller.
+                                  </p>
+                                ) : pack.payoutStatus === 'Disputed' ? (
+                                  <p className="rex-receipt-warn">
+                                    You reported a problem. Payment is on hold
+                                    while our team reviews it.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <strong>
+                                      Have you received this package?
+                                    </strong>
+                                    <p>
+                                      The seller is only paid after you confirm
+                                      {pack.autoReleaseAt?.seconds
+                                        ? `, or automatically on ${new Date(
+                                            pack.autoReleaseAt.seconds * 1000,
+                                          ).toLocaleDateString()} if you report no problem`
+                                        : ''}
+                                      .
+                                    </p>
+
+                                    {disputeFor === pack.id ? (
+                                      <div className="rex-receipt-form">
+                                        <textarea
+                                          rows={3}
+                                          maxLength={500}
+                                          value={disputeText}
+                                          onChange={(e) =>
+                                            setDisputeText(e.target.value)
+                                          }
+                                          placeholder="Describe the problem (not received, damaged, wrong item...)"
+                                          aria-label="Describe the problem"
+                                        />
+                                        <div className="rex-receipt-actions">
+                                          <button
+                                            type="button"
+                                            className="rex-receipt-danger"
+                                            disabled={
+                                              actionBusy === pack.id ||
+                                              disputeText.trim().length < 10
+                                            }
+                                            onClick={() =>
+                                              void respond(pack.id, 'dispute')
+                                            }
+                                          >
+                                            {actionBusy === pack.id
+                                              ? 'Sending...'
+                                              : 'Send report'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDisputeFor('')}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="rex-receipt-actions">
+                                        <button
+                                          type="button"
+                                          className="rex-receipt-yes"
+                                          disabled={actionBusy === pack.id}
+                                          onClick={() =>
+                                            void respond(pack.id, 'confirm')
+                                          }
+                                        >
+                                          {actionBusy === pack.id
+                                            ? 'Please wait...'
+                                            : 'Yes, I received it'}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={actionBusy === pack.id}
+                                          onClick={() => {
+                                            setDisputeFor(pack.id)
+                                            setActionMsg('')
+                                          }}
+                                        >
+                                          Report a problem
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+
+                                {actionMsg && (
+                                  <p className="rex-receipt-msg" role="status">
+                                    {actionMsg}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
                           <Link
                             className="rex-order-contact"
                             to={`/marketplace/store/${pack.sellerId}`}
@@ -561,9 +731,9 @@ export default function MarketplaceOrders() {
             <MessageSquare size={42} />
             <h2>No enquiries yet.</h2>
             <p>Questions you send to stores and their replies appear here.</p>
-            <Link className="rex-market-primary-link" to="/marketplace">
+            <a className="rex-market-primary-link" href="/marketplace">
               Browse stores
-            </Link>
+            </a>
           </div>
         ) : (
           <div className="rex-orders-list">
