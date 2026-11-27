@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import DisputeThread from './DisputeThread'
+import SellerEarnings from './SellerEarnings'
 import {
   addDoc,
   collection,
@@ -1197,6 +1198,8 @@ export default function Marketplace() {
 
           {/* DELIVERY PRICES */}
           <SellerDelivery zones={readZones(store.deliveryZones)} />
+
+          {sellerOrders.length > 0 && <SellerEarnings orders={sellerOrders} />}
 
           {/* MY ORDERS */}
           <div className="seller-orders-section">
