@@ -293,6 +293,8 @@ export default function Marketplace() {
   const uid = user?.uid
   const hasStore = store !== null
 
+  const [orderNotice, setOrderNotice] = useState<{ id: string; ok: boolean; text: string } | null>(null)
+
   const formSyncedRef = useRef(false)
   const feedbackRef = useRef<HTMLDivElement | null>(null)
 
@@ -466,12 +468,12 @@ export default function Marketplace() {
     status: 'Processing' | 'Shipped' | 'Delivered'
   ) {
     if (!user) {
-      setError('Please sign in again.')
+      setOrderNotice({ id: order.id, ok: false, text: 'Please sign in again.' })
       return
     }
 
     if (order.paymentStatus !== 'Paid') {
-      setError('This order cannot be updated until payment is confirmed.')
+      setOrderNotice({ id: order.id, ok: false, text: 'This order cannot be updated until payment is confirmed.' })
       return
     }
 
@@ -479,13 +481,12 @@ export default function Marketplace() {
     const shippingCarrier = carrierInputs[order.id] || ''
 
     if (status === 'Shipped' && !trackingNumber.trim()) {
-      setError('Enter a tracking number before shipping this order.')
+      setOrderNotice({ id: order.id, ok: false, text: 'Enter a tracking number before shipping this order.' })
       return
     }
 
     setUpdatingOrder(order.id)
-    setError('')
-    setMessage('')
+    setOrderNotice(null)
 
     try {
       const token = await user.getIdToken()
@@ -510,17 +511,20 @@ export default function Marketplace() {
         throw new Error(data.error || 'Unable to update this order.')
       }
 
-      setMessage(data.message || 'Order updated successfully.')
+      setOrderNotice({ id: order.id, ok: true, text: data.message || 'Order updated successfully.' })
 
       await loadSellerOrders(true)
     } catch (err) {
       console.error('Order update error:', err)
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to update this order.'
-      )
+      setOrderNotice({
+        id: order.id,
+        ok: false,
+        text:
+          err instanceof Error
+            ? err.message
+            : 'Unable to update this order.',
+      })
     } finally {
       setUpdatingOrder(null)
     }
@@ -1486,6 +1490,19 @@ export default function Marketplace() {
                       <p className="seller-order-payment-notice">
                         Waiting for secure payment confirmation. Fulfilment
                         actions will become available once payment is verified.
+                      </p>
+                    )}
+
+                    {orderNotice?.id === order.id && (
+                      <p
+                        className={
+                          orderNotice.ok
+                            ? 'marketplace-success'
+                            : 'marketplace-error'
+                        }
+                        role={orderNotice.ok ? 'status' : 'alert'}
+                      >
+                        {orderNotice.text}
                       </p>
                     )}
                   </article>
