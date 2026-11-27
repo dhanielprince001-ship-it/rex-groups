@@ -6,6 +6,7 @@ import SiteLayout from './SiteLayout'
 import HomePage from './HomePage'
 import BusinessDigitalSolutionsPage from './BusinessDigitalSolutionsPage'
 import ClientDashboard from './ClientDashboard'
+import ErrorBoundary from './ErrorBoundary'
 import AdminBdsDashboard from './AdminBdsDashboard'
 import MarketplacePage from './MarketplacePage'
 import MarketplaceHome from './MarketplaceHome'
@@ -176,12 +177,20 @@ function MarketplacePlaceholder({
   )
 }
 
+// Resets the error screen whenever the visitor navigates to another page.
+function RouteBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+
+  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <CartProvider>
         <RouteEffects />
 
+        <RouteBoundary>
         <Routes>
           <Route element={<SiteLayout />}>
             <Route index element={<HomePage />} />
@@ -263,6 +272,7 @@ export default function App() {
             }
           />
         </Routes>
+        </RouteBoundary>
       </CartProvider>
     </ThemeProvider>
   )
