@@ -22,3 +22,12 @@
   width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--rm-line);
   background: var(--rm-paper); color: var(--rm-ink); border-radius: 5px; font: inherit;
 }
+
+/* Buyer refund display */
+.rex-pay-badge.refunded { background: #e8f1ff; color: #1d4ed8; }
+.rex-refund-card { display: grid; gap: 4px; margin: 10px 0; padding: 12px 14px; border-radius: 12px; border: 1px solid #bfd4ff; background: #f1f6ff; color: #1e3a8a; }
+.rex-refund-card p { margin: 0; font-size: 0.9rem; }
+.rex-refund-card small { opacity: 0.8; }
+.rex-order-refunded { display: flex; justify-content: space-between; color: #1d4ed8; font-weight: 700; }
+[data-theme='dark'] .rex-refund-card { background: #14233f; border-color: #2a437a; color: #cfe0ff; }
+[data-theme='dark'] .rex-pay-badge.refunded { background: #14233f; color: #9ec0ff; }
