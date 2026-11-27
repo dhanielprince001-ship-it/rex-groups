@@ -1,4 +1,3 @@
-
 /* Keeps the marketplace admin tables inside the screen on phones.
    Wide tables now scroll sideways inside their own box instead of
    stretching the whole page (which made phones zoom out). */
@@ -45,3 +44,30 @@
   left: 8px;
   max-width: min(560px, calc(100vw - 56px));
 }
+
+/* Refund form inside a payouts table row */
+.refund-form {
+  position: sticky;
+  left: 8px;
+  max-width: min(520px, calc(100vw - 56px));
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.08);
+}
+.refund-form label { display: grid; gap: 4px; font-size: 12px; }
+.refund-form input:not([type='checkbox']),
+.refund-form textarea {
+  padding: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.refund-hint { margin: 0; font-size: 12px; opacity: 0.75; line-height: 1.5; }
+.refund-check { display: flex !important; align-items: center; gap: 8px; }
+.refund-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.refund-error { margin: 0; color: #c2410c; font-size: 13px; font-weight: 600; }
