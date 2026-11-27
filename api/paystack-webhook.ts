@@ -1,9 +1,33 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 export const config = { api: { bodyParser: false } }
+
+// Best-effort email via Resend. Never throws, so a mail problem can never
+// affect a payment or an order. Skipped when RESEND_API_KEY / BDS_NOTIFY_FROM are unset.
+async function sendMail(to: string, subject: string, text: string) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.BDS_NOTIFY_FROM
+
+  if (!key || !from || !to) return
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to: [to], subject, text }),
+    })
+  } catch (error) {
+    console.error('Email failed:', error)
+  }
+}
+const SITE = process.env.APP_BASE_URL || 'https://rex-groups.vercel.app'
 
 function appInstance() {
   if (getApps().length) return getApps()[0]
@@ -271,6 +295,9 @@ export default async function handler(
       .collection('orders')
       .doc(String(transactionData.orderId))
 
+    let justPaid = false
+    let paidSellerOrderIds: string[] = []
+
     await db.runTransaction(async (tx) => {
       const currentTransaction = await tx.get(transactionRef)
       const orderSnap = await tx.get(orderRef)
@@ -278,6 +305,8 @@ export default async function handler(
       if (!orderSnap.exists) {
         throw new Error('ORDER_NOT_FOUND')
       }
+
+      justPaid = false
 
       if (
         currentTransaction.data()?.status === 'Success' ||
@@ -329,6 +358,9 @@ export default async function handler(
         }
       }
 
+      justPaid = true
+      paidSellerOrderIds = sellerIds
+
       tx.update(transactionRef, {
         status: 'Success',
         providerTransactionId: String(payment.id || ''),
@@ -337,6 +369,30 @@ export default async function handler(
         updatedAt: FieldValue.serverTimestamp(),
       })
     })
+
+    // Tell each seller they have a new paid order (best effort, never blocks).
+    if (justPaid) {
+      try {
+        const auth = getAuth(appInstance())
+
+        for (const id of paidSellerOrderIds) {
+          const snap = await db.collection('sellerOrders').doc(id).get()
+          const data = snap.data()
+
+          if (!data?.sellerId) continue
+
+          const seller = await auth.getUser(String(data.sellerId))
+
+          await sendMail(
+            seller.email || '',
+            'New paid order on Rex Marketplace',
+            `You have a new paid order from ${data.customerName || 'a customer'} (NGN ${Number(data.total || 0).toLocaleString()}).\n\nOpen your seller dashboard to start processing it: ${SITE}/marketplace/seller`,
+          )
+        }
+      } catch (error) {
+        console.error('Seller notification failed:', error)
+      }
+    }
 
     return res.status(200).send('Webhook processed.')
   } catch (error) {
