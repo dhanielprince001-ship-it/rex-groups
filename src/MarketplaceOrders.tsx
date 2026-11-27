@@ -16,6 +16,7 @@ import {
 import { useAuth } from './AuthPanel'
 import ThemeToggle from './ThemeToggle'
 import './delivery-confirm.css'
+import DisputeThread from './DisputeThread'
 
 type Seconds = { seconds?: number } | null
 
@@ -620,10 +621,20 @@ export default function MarketplaceOrders() {
                                     seller.
                                   </p>
                                 ) : pack.payoutStatus === 'Disputed' ? (
-                                  <p className="rex-receipt-warn">
-                                    You reported a problem. Payment is on hold
-                                    while our team reviews it.
-                                  </p>
+                                  <>
+                                    <p className="rex-receipt-warn">
+                                      You reported a problem. Payment is on hold
+                                      while our team reviews it.
+                                    </p>
+                                    <DisputeThread
+                                      user={user}
+                                      orderId={pack.id}
+                                      viewer="buyer"
+                                      url="/api/my-orders"
+                                      sendMethod="POST"
+                                      sendExtra={{ action: 'message' }}
+                                    />
+                                  </>
                                 ) : (
                                   <>
                                     <strong>
