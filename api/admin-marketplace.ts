@@ -784,6 +784,205 @@ export default async function handler(
         return res.status(200).json({ success: true })
       }
 
+      // Refund a buyer for one seller order: record it, and optionally send it
+      // back through Paystack. Never runs after the seller has been paid out.
+      if (action === 'refund-order') {
+        const sellerOrderId =
+          typeof body.sellerOrderId === 'string' ? body.sellerOrderId.trim() : ''
+        const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+        const viaPaystack = body.viaPaystack === true
+
+        if (!sellerOrderId) return sendError(res, 400, 'A seller order is required')
+
+        if (reason.length < 5 || reason.length > 300) {
+          return sendError(res, 400, 'Give a reason (5 to 300 characters)')
+        }
+
+        const ref = db.collection('sellerOrders').doc(sellerOrderId)
+
+        // Step 1: validate and lock, so a double tap cannot refund twice.
+        const reserved = await db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref)
+
+          if (!snap.exists) return { error: 'Seller order not found', status: 404 }
+
+          const order = snap.data()!
+
+          if (order.paymentStatus !== 'Paid') {
+            return { error: 'Only paid orders can be refunded', status: 400 }
+          }
+
+          if (order.payoutStatus === 'Paid Out' || order.payoutStatus === 'Cancelled') {
+            return {
+              error: 'This order was already paid out or cancelled, so it cannot be refunded here',
+              status: 409,
+            }
+          }
+
+          if (order.refundInFlight === true) {
+            return { error: 'A refund is already being processed for this order', status: 409 }
+          }
+
+          const totalKobo = Math.round(
+            (Number(order.total) ||
+              (Number(order.subtotal) || 0) + (Number(order.deliveryFee) || 0)) * 100,
+          )
+          const refundedKobo = Math.round((Number(order.refundedAmount) || 0) * 100)
+          const remaining = totalKobo - refundedKobo
+          const requested =
+            body.amount === undefined || body.amount === ''
+              ? remaining
+              : Math.round(Number(body.amount) * 100)
+
+          if (!Number.isFinite(requested) || requested < 100 || requested > remaining) {
+            return {
+              error: `Enter an amount between ₦1 and ₦${(remaining / 100).toLocaleString()}`,
+              status: 400,
+            }
+          }
+
+          tx.update(ref, { refundInFlight: true, updatedAt: FieldValue.serverTimestamp() })
+
+          return { order, amountKobo: requested, totalKobo, refundedKobo }
+        })
+
+        if ('error' in reserved) {
+          return sendError(res, reserved.status as number, reserved.error as string)
+        }
+
+        const { order, amountKobo, totalKobo, refundedKobo } = reserved as {
+          order: Record<string, any>
+          amountKobo: number
+          totalKobo: number
+          refundedKobo: number
+        }
+
+        // Step 2 (optional): ask Paystack to send the money back.
+        let paystackRefundId = ''
+
+        if (viaPaystack) {
+          try {
+            const secret = process.env.PAYSTACK_SECRET_KEY
+
+            if (!secret) throw new Error('Paystack is not configured on the server')
+
+            const parent = await db.collection('orders').doc(String(order.orderId)).get()
+            const reference = parent.data()?.paymentReference
+
+            if (!reference) {
+              throw new Error(
+                'No Paystack payment reference was found for this order. Refund it manually and record it instead.',
+              )
+            }
+
+            const response = await fetch('https://api.paystack.co/refund', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${secret}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                transaction: reference,
+                amount: amountKobo,
+                customer_note: reason,
+                merchant_note: `Refund for seller order ${sellerOrderId}`,
+              }),
+            })
+
+            const result = (await response.json().catch(() => ({}))) as {
+              status?: boolean
+              message?: string
+              data?: { id?: number | string }
+            }
+
+            if (!response.ok || result.status !== true) {
+              throw new Error(result.message || 'Paystack refused the refund')
+            }
+
+            paystackRefundId = String(result.data?.id ?? '')
+          } catch (error) {
+            await ref.update({ refundInFlight: FieldValue.delete() })
+
+            return sendError(
+              res,
+              502,
+              error instanceof Error ? error.message : 'Paystack refund failed',
+            )
+          }
+        }
+
+        // Step 3: record the refund.
+        const amount = amountKobo / 100
+        const refundedTotalKobo = refundedKobo + amountKobo
+        const full = refundedTotalKobo >= totalKobo
+
+        const patch: Record<string, unknown> = {
+          refundedAmount: refundedTotalKobo / 100,
+          refundStatus: full ? 'Refunded' : 'Partially refunded',
+          refunds: FieldValue.arrayUnion({
+            amount,
+            mode: viaPaystack ? 'Paystack' : 'Recorded manually',
+            reason,
+            paystackRefundId,
+            by: adminToken.uid,
+            atMs: Date.now(),
+          }),
+          refundInFlight: FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }
+
+        if (full) {
+          patch.payoutStatus = 'Cancelled'
+          patch.payoutCancelledAt = FieldValue.serverTimestamp()
+          patch.payoutReleaseReason = 'Cancelled: buyer refunded'
+          patch.autoReleaseAt = FieldValue.delete()
+        } else {
+          // A partial refund comes out of the seller's payout.
+          patch.sellerNetAmount = Math.max(0, (Number(order.sellerNetAmount) || 0) - amount)
+        }
+
+        await ref.update(patch)
+
+        await audit('refund-order', String(order.sellerId || ''), String(order.storeName || ''), reason, {
+          sellerOrderId,
+          amount,
+          mode: viaPaystack ? 'Paystack' : 'Recorded manually',
+        })
+
+        // Best-effort notes and emails; never block the refund.
+        try {
+          const note = `A refund of ₦${amount.toLocaleString()} was issued${full ? '' : ' (partial)'}. ${reason}`
+
+          if (order.disputeReason) {
+            await ref.collection('disputeMessages').add({
+              role: 'admin',
+              authorName: 'Rex Groups',
+              text: note,
+              createdAt: FieldValue.serverTimestamp(),
+            })
+          }
+
+          await sendMail(
+            String(order.customerEmail || ''),
+            'Your refund from Rex Marketplace',
+            `Hi ${order.customerName || ''},\n\nWe have refunded ₦${amount.toLocaleString()} for your order from ${order.storeName || 'the seller'}.\n${viaPaystack ? 'It can take a few business days to reach your account.' : 'We will confirm once it reaches your account.'}\n\nReason: ${reason}\n\nRex Groups`,
+          )
+
+          if (order.sellerId) {
+            const seller = await getAuth().getUser(String(order.sellerId))
+            await sendMail(
+              seller.email || '',
+              'An order was refunded',
+              `₦${amount.toLocaleString()} was refunded to the buyer on one of your orders.${full ? ' The payout for this order was cancelled.' : ' Your payout for this order was reduced by that amount.'}\n\nReason: ${reason}`,
+            )
+          }
+        } catch (error) {
+          console.error('Refund notification failed:', error)
+        }
+
+        return res.status(200).json({ success: true, amount, viaPaystack, full })
+      }
+
       if (action === 'payout') {
         const sellerOrderId = body.sellerOrderId
         const operation = body.operation
