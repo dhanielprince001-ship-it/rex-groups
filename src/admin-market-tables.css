@@ -1,0 +1,47 @@
+
+/* Keeps the marketplace admin tables inside the screen on phones.
+   Wide tables now scroll sideways inside their own box instead of
+   stretching the whole page (which made phones zoom out). */
+.admin-market-panel {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.admin-market-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-market-table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-market-table th,
+.admin-market-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  min-width: 90px;
+  overflow-wrap: anywhere;
+}
+
+.admin-market-table th {
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Dispute chat inside a table row: keep it readable without sideways scrolling. */
+.admin-market-table .dispute-thread {
+  position: sticky;
+  left: 8px;
+  max-width: min(560px, calc(100vw - 56px));
+}
