@@ -1,0 +1,24 @@
+
+.rex-receipt {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--rm-line);
+  background: var(--rm-soft);
+  border-radius: 6px;
+}
+.rex-receipt p { margin: 6px 0 0; font-size: 14px; line-height: 1.6; color: var(--rm-muted); }
+.rex-receipt-done { display: flex; gap: 8px; align-items: center; color: var(--rm-accent-ink) !important; font-weight: 700; }
+.rex-receipt-warn { color: #c2410c !important; font-weight: 700; }
+.rex-receipt-msg { color: var(--rm-ink) !important; font-weight: 600; }
+.rex-receipt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.rex-receipt-actions button {
+  padding: 11px 16px; border-radius: 5px; border: 1px solid var(--rm-line);
+  background: var(--rm-paper); color: var(--rm-ink); font-weight: 700; cursor: pointer;
+}
+.rex-receipt-actions button.rex-receipt-yes { background: var(--rm-accent); border-color: var(--rm-accent); color: #18210d; }
+.rex-receipt-actions button.rex-receipt-danger { color: #c2410c; border-color: #c2410c; }
+.rex-receipt-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.rex-receipt-form textarea {
+  width: 100%; margin-top: 12px; padding: 12px; border: 1px solid var(--rm-line);
+  background: var(--rm-paper); color: var(--rm-ink); border-radius: 5px; font: inherit;
+}
