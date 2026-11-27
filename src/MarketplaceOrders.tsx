@@ -45,6 +45,11 @@ type OrderPackage = {
   deliveredAt: Seconds
   payoutStatus?: string
   autoReleaseAt?: Seconds
+  total?: number
+  refundStatus?: string
+  refundedAmount?: number
+  refundProviderStatus?: string
+  refunds?: { amount: number; reason: string; mode: string; atMs: number }[]
 }
 
 type BuyerOrder = {
@@ -53,6 +58,7 @@ type BuyerOrder = {
   deliveryFee?: number | null
   status?: string
   paymentStatus?: string
+  refundedAmount?: number
   createdAt: Seconds
   shippingAddress: {
     fullName?: string
@@ -122,9 +128,26 @@ async function readJson(response: Response) {
 
 function paymentClass(status: string | undefined) {
   if (status === 'Paid') return 'paid'
-  if (status === 'Partially Paid') return 'partial'
+  if (status === 'Partially Paid' || status === 'Partially Refunded') return 'partial'
+  if (status === 'Refunded') return 'refunded'
 
   return 'unpaid'
+}
+
+function refundProgress(pack: OrderPackage) {
+  if (pack.refundProviderStatus === 'Processed') {
+    return 'Processed by our payment provider. It can take a few business days to show in your bank account.'
+  }
+
+  if (pack.refundProviderStatus === 'Failed') {
+    return 'Our payment provider could not complete this automatically. Rex Groups is following it up and will contact you.'
+  }
+
+  if (pack.refundProviderStatus === 'Processing' || pack.refundProviderStatus === 'Requested') {
+    return 'On its way back to your original payment method. This can take a few business days.'
+  }
+
+  return 'Rex Groups will confirm once it reaches your account.'
 }
 
 function Header({ right }: { right: ReactNode }) {
@@ -421,6 +444,25 @@ export default function MarketplaceOrders() {
                         <span>Order total</span>
                         <strong>{money.format(total)}</strong>
                       </div>
+
+                      {(order.refundedAmount ?? 0) > 0 && (
+                        <>
+                          <div className="rex-order-refunded">
+                            <span>Refunded to you</span>
+                            <strong>
+                              −{money.format(order.refundedAmount ?? 0)}
+                            </strong>
+                          </div>
+                          <div className="rex-order-grand-total">
+                            <span>You paid in total</span>
+                            <strong>
+                              {money.format(
+                                Math.max(0, total - (order.refundedAmount ?? 0)),
+                              )}
+                            </strong>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {order.shippingAddress && (
@@ -475,11 +517,21 @@ export default function MarketplaceOrders() {
 
                           <p className="rex-package-pay">
                             <span
-                              className={`rex-pay-badge ${paymentClass(pack.paymentStatus)}`}
+                              className={`rex-pay-badge ${
+                                pack.refundStatus === 'Refunded'
+                                  ? 'refunded'
+                                  : pack.refundStatus
+                                    ? 'partial'
+                                    : paymentClass(pack.paymentStatus)
+                              }`}
                             >
-                              {pack.paymentStatus === 'Paid'
-                                ? 'Paid'
-                                : pack.paymentStatus || 'Unpaid'}
+                              {pack.refundStatus === 'Refunded'
+                                ? 'Refunded'
+                                : pack.refundStatus === 'Partially refunded'
+                                  ? 'Partially refunded'
+                                  : pack.paymentStatus === 'Paid'
+                                    ? 'Paid'
+                                    : pack.paymentStatus || 'Unpaid'}
                             </span>
 
                             {pack.paidAt?.seconds ? (
@@ -511,6 +563,27 @@ export default function MarketplaceOrders() {
                             >
                               Rate this store
                             </Link>
+                          )}
+
+                          {(pack.refundedAmount ?? 0) > 0 && (
+                            <div className="rex-refund-card" role="status">
+                              <strong>
+                                {pack.refundStatus === 'Refunded'
+                                  ? `Refunded in full: ${money.format(pack.refundedAmount ?? 0)}`
+                                  : `Partially refunded: ${money.format(pack.refundedAmount ?? 0)} of ${money.format(pack.total ?? 0)}`}
+                              </strong>
+                              <p>{refundProgress(pack)}</p>
+
+                              {(pack.refunds ?? []).map((refund, index) => (
+                                <small key={`${refund.atMs}-${index}`}>
+                                  {money.format(refund.amount)}
+                                  {refund.atMs
+                                    ? ` · ${new Date(refund.atMs).toLocaleDateString()}`
+                                    : ''}
+                                  {refund.reason ? ` · ${refund.reason}` : ''}
+                                </small>
+                              ))}
+                            </div>
                           )}
 
                           <ul className="rex-package-items">
@@ -575,6 +648,7 @@ export default function MarketplaceOrders() {
                           )}
 
                           {pack.paymentStatus === 'Paid' &&
+                            pack.refundStatus !== 'Refunded' &&
                             pack.status === 'Awaiting Fulfilment' && (
                               <p className="rex-order-note">
                                 Payment confirmed. Your order is waiting for
@@ -611,6 +685,7 @@ export default function MarketplaceOrders() {
                           )}
 
                           {pack.paymentStatus === 'Paid' &&
+                            pack.refundStatus !== 'Refunded' &&
                             (pack.status === 'Shipped' ||
                               pack.status === 'Delivered') && (
                               <div className="rex-receipt">
