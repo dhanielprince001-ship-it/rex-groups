@@ -1,6 +1,6 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Single endpoint for the Business Digital Solutions division.
@@ -133,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (phone && !/^[+\d\s()-]{5,30}$/.test(phone)) throw new HttpError(400, 'Enter a valid phone number.')
 
       const mine = await db.collection('bdsRequests').where('clientId', '==', uid).get()
-      const open = mine.docs.filter((d: { data(): Record<string, unknown> }) => OPEN_STATUSES.includes(d.data().status)).length
+      const open = mine.docs.filter((d) => OPEN_STATUSES.includes(String(d.data().status))).length
       if (open >= MAX_OPEN_REQUESTS) {
         throw new HttpError(429, `You already have ${MAX_OPEN_REQUESTS} open requests. Please wait for some to finish.`)
       }
@@ -241,6 +241,141 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const assignee = optionalText(body.assignee, 'Assignee', 80)
       await ref.update({ assignee, updatedAt: FieldValue.serverTimestamp() })
       await logActivity(id, assignee ? `Assigned to ${assignee}: ${data.title}` : `Unassigned: ${data.title}`)
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'sendQuote') {
+      requireAdmin()
+      const { ref, data, id } = await loadRequest()
+
+      if (['Rejected', 'Cancelled', 'Completed'].includes(String(data.status))) {
+        throw new HttpError(400, 'A quote cannot be sent for this request.')
+      }
+
+      if ((data.quote as { status?: string } | undefined)?.status === 'Accepted') {
+        throw new HttpError(400, 'The client already accepted a quote for this request.')
+      }
+
+      const amount = Number(body.amount)
+      if (!Number.isInteger(amount) || amount < 100 || amount > 1_000_000_000) {
+        throw new HttpError(400, 'Enter a whole-naira amount from 100 to 1,000,000,000.')
+      }
+
+      const validDays = body.validDays === undefined || body.validDays === '' ? 14 : Number(body.validDays)
+      if (!Number.isInteger(validDays) || validDays < 1 || validDays > 60) {
+        throw new HttpError(400, 'Quote validity must be 1 to 60 days.')
+      }
+
+      const summary = text(body.summary, 'Quote summary', 10, 1000)
+      const paymentNote = optionalText(body.paymentNote, 'Payment instructions', 500)
+
+      await ref.update({
+        quote: {
+          amount,
+          currency: 'NGN',
+          summary,
+          paymentNote,
+          validUntil: Timestamp.fromMillis(Date.now() + validDays * 86_400_000),
+          status: 'Sent',
+          sentAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      await ref.collection('updates').add({
+        kind: 'status',
+        text: `A quote of ₦${amount.toLocaleString()} was sent. Please review it and accept or decline.`,
+        authorName: 'Rex Groups',
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      await logActivity(id, `Quote ₦${amount.toLocaleString()} sent: ${data.title}`)
+      await notify(String(data.clientEmail), `Your quote for "${data.title}"`,
+        `Hi ${data.clientName},\n\nWe have prepared a quote of ₦${amount.toLocaleString()} (valid for ${validDays} days).\n\n${summary}\n\nReview and accept it in your Rex Groups dashboard.`)
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'respondQuote') {
+      if (admin) throw new HttpError(403, 'Only the client can respond to a quote.')
+      const { ref, data, id } = await loadRequest()
+      const quote = data.quote as { status?: string; amount?: number; validUntil?: { toMillis(): number } } | undefined
+
+      if (!quote || quote.status !== 'Sent') {
+        throw new HttpError(400, 'There is no open quote to respond to.')
+      }
+
+      if (quote.validUntil && quote.validUntil.toMillis() < Date.now()) {
+        throw new HttpError(400, 'This quote has expired. Please ask for a new one.')
+      }
+
+      const decision = oneOf(body.decision, ['accept', 'decline'], 'decision')
+      const accepted = decision === 'accept'
+      const patch: Record<string, unknown> = {
+        'quote.status': accepted ? 'Accepted' : 'Declined',
+        'quote.respondedAt': FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+
+      if (accepted && ['Submitted', 'Under review'].includes(String(data.status))) {
+        patch.status = 'Approved'
+      }
+
+      await ref.update(patch)
+      await ref.collection('updates').add({
+        kind: 'status',
+        text: accepted ? 'The client accepted the quote.' : 'The client declined the quote.',
+        authorName: 'Client',
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      await logActivity(id, `Quote ${accepted ? 'accepted' : 'declined'}: ${data.title}`)
+      await notify(process.env.BDS_ADMIN_EMAIL || 'rexgroups.uk@gmail.com',
+        `Quote ${accepted ? 'accepted' : 'declined'}: ${data.title}`,
+        `${data.clientName} ${accepted ? 'accepted' : 'declined'} the quote of ₦${Number(quote.amount || 0).toLocaleString()}.`)
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'recordPayment') {
+      requireAdmin()
+      const { ref, data, id } = await loadRequest()
+      const quote = data.quote as { status?: string; amount?: number } | undefined
+
+      if (!quote || quote.status !== 'Accepted' || !quote.amount) {
+        throw new HttpError(400, 'Payments can only be recorded against an accepted quote.')
+      }
+
+      const amount = Number(body.amount)
+      if (!Number.isInteger(amount) || amount < 1) {
+        throw new HttpError(400, 'Enter a whole-naira payment amount.')
+      }
+
+      const before = Number((data.payment as { paid?: number } | undefined)?.paid || 0)
+      const paid = before + amount
+
+      if (paid > quote.amount) {
+        throw new HttpError(400, `That is more than the balance (₦${(quote.amount - before).toLocaleString()}).`)
+      }
+
+      const method = oneOf(body.method, ['Bank transfer', 'Cash', 'Paystack link', 'Other'], 'payment method')
+      const reference = optionalText(body.reference, 'Reference', 80)
+      const balance = quote.amount - paid
+
+      await ref.update({
+        payment: {
+          paid,
+          status: balance === 0 ? 'Paid' : 'Part paid',
+          lastMethod: method,
+          lastReference: reference,
+          paidAt: FieldValue.serverTimestamp(),
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      await ref.collection('updates').add({
+        kind: 'status',
+        text: `Payment of ₦${amount.toLocaleString()} received (${method}). ${balance === 0 ? 'Paid in full. Thank you!' : `Balance: ₦${balance.toLocaleString()}.`}`,
+        authorName: 'Rex Groups',
+        createdAt: FieldValue.serverTimestamp(),
+      })
+      await logActivity(id, `Payment ₦${amount.toLocaleString()} recorded: ${data.title}`)
+      await notify(String(data.clientEmail), `Payment received for "${data.title}"`,
+        `Hi ${data.clientName},\n\nWe received your payment of ₦${amount.toLocaleString()} (${method}${reference ? `, ref ${reference}` : ''}).\n${balance === 0 ? 'Your project is paid in full. Thank you!' : `Remaining balance: ₦${balance.toLocaleString()}.`}\n\nRex Groups`)
       return res.status(200).json({ ok: true })
     }
 
