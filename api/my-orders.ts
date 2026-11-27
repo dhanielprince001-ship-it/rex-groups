@@ -38,6 +38,9 @@ function toSeconds(value: unknown): { seconds: number } | null {
 type PackageSummary = {
   status: string
   paymentStatus: string
+  refundStatus?: string
+  refundedAmount?: number
+  total?: number
 }
 
 function rollUpPaymentStatus(
@@ -45,6 +48,12 @@ function rollUpPaymentStatus(
   fallback: string,
 ) {
   if (packages.length === 0) return fallback
+
+  const refunded = packages.filter((p) => p.refundStatus === 'Refunded').length
+  const anyRefund = packages.some((p) => (p.refundedAmount || 0) > 0)
+
+  if (refunded === packages.length) return 'Refunded'
+  if (anyRefund) return 'Partially Refunded'
 
   const paid = packages.filter((p) => p.paymentStatus === 'Paid').length
 
@@ -56,6 +65,8 @@ function rollUpPaymentStatus(
 
 function rollUpStatus(packages: PackageSummary[], fallback: string) {
   if (packages.length === 0) return fallback
+
+  if (packages.every((p) => p.refundStatus === 'Refunded')) return 'Refunded'
 
   const statuses = packages.map((p) => p.status)
 
@@ -422,7 +433,7 @@ export default async function handler(
         deliveredAt: toSeconds(data.deliveredAt),
         updatedAt: toSeconds(data.updatedAt),
         payoutStatus:
-          data.refundStatus === 'Refunded' || data.payoutStatus === 'Cancelled'
+          data.refundStatus === 'Refunded'
             ? 'Refunded'
             : data.payoutStatus === 'Disputed'
             ? 'Disputed'
@@ -430,6 +441,26 @@ export default async function handler(
               ? 'Released'
               : 'Held',
         autoReleaseAt: toSeconds(data.autoReleaseAt),
+        total:
+          (Number(data.total) ||
+            (Number(data.subtotal) || 0) + (Number(data.deliveryFee) || 0)),
+        refundStatus:
+          data.refundStatus === 'Refunded'
+            ? 'Refunded'
+            : data.refundStatus === 'Partially refunded'
+              ? 'Partially refunded'
+              : '',
+        refundedAmount: Number(data.refundedAmount) || 0,
+        // Paystack's own progress (Requested / Processing / Processed / Failed).
+        refundProviderStatus: String(data.refundProviderStatus || ''),
+        refunds: (Array.isArray(data.refunds) ? data.refunds : [])
+          .map((r: Record<string, unknown>) => ({
+            amount: Number(r.amount) || 0,
+            reason: String(r.reason || ''),
+            mode: String(r.mode || ''),
+            atMs: Number(r.atMs) || 0,
+          }))
+          .sort((a: { atMs: number }, b: { atMs: number }) => b.atMs - a.atMs),
       }
 
       const list = packagesByOrder.get(orderId) || []
@@ -468,6 +499,10 @@ export default async function handler(
           ),
           shippingAddress: data.shippingAddress || null,
           createdAt: toSeconds(data.createdAt),
+          refundedAmount: packages.reduce(
+            (sum, p) => sum + (p.refundedAmount || 0),
+            0,
+          ),
           packages,
         }
       })
