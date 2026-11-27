@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import DisputeThread from './DisputeThread'
 import {
   addDoc,
   collection,
@@ -1374,6 +1375,16 @@ export default function Marketplace() {
                             return payout
                           })()}
                         </span>
+
+                        {order.payoutStatus === 'Disputed' && (
+                          <DisputeThread
+                            user={user}
+                            orderId={order.id}
+                            viewer="seller"
+                            url="/api/seller-orders"
+                            sendMethod="POST"
+                          />
+                        )}
                       </div>
                     )}
 
