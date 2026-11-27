@@ -347,6 +347,10 @@ export default async function handler(
           throw new Error('PAYMENT_NOT_CONFIRMED')
         }
 
+        if (order.refundStatus === 'Refunded') {
+          throw new Error('ORDER_REFUNDED')
+        }
+
         const currentStatus = order.status
 
         const validTransition =
@@ -450,6 +454,10 @@ export default async function handler(
         PAYMENT_NOT_CONFIRMED: {
           status: 403,
           message: 'This order cannot be processed until payment is confirmed.',
+        },
+        ORDER_REFUNDED: {
+          status: 409,
+          message: 'This order was refunded to the buyer, so it cannot be fulfilled.',
         },
         INVALID_STATUS_TRANSITION: {
           status: 400,
