@@ -1,6 +1,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import DisputeThread from './DisputeThread'
+import RefundForm from './RefundForm'
 import './admin-market-tables.css'
 import {
   Activity,
@@ -84,6 +85,7 @@ export default function AdminMarketplaceManagement() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [threadFor, setThreadFor] = useState('')
+  const [refundFor, setRefundFor] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -262,7 +264,7 @@ export default function AdminMarketplaceManagement() {
   async function action(
     label: string,
     body: Record<string, unknown>,
-  ) {
+  ): Promise<boolean> {
     setBusy(label)
     setError('')
     setSuccess('')
@@ -277,12 +279,16 @@ export default function AdminMarketplaceManagement() {
 
       setSuccess('Update saved successfully.')
       await load()
+
+      return true
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : 'Unable to save this update.',
       )
+
+      return false
     } finally {
       setBusy('')
     }
@@ -1076,6 +1082,10 @@ export default function AdminMarketplaceManagement() {
                               </button>
                             )}
 
+                            {order.refundStatus
+                              ? `${order.refundStatus}: ${money.format(number(order.refundedAmount))} `
+                              : null}
+
                             {status === 'Held' && order.autoReleaseAt?.seconds
                               ? `Auto-releases ${dateText(order.autoReleaseAt)}`
                               : null}
@@ -1171,7 +1181,7 @@ export default function AdminMarketplaceManagement() {
                                   onClick={() => {
                                     if (
                                       window.confirm(
-                                        'Cancel this payout because the buyer is being refunded? The seller will not be paid.',
+                                        'Cancel this payout only? The seller will not be paid. This does NOT send any money to the buyer. Use "Refund buyer" for that.',
                                       )
                                     ) {
                                       void action(order.id, {
@@ -1182,12 +1192,53 @@ export default function AdminMarketplaceManagement() {
                                     }
                                   }}
                                 >
-                                  Cancel (refund buyer)
+                                  Cancel payout only
+                                </button>
+                              )}
+
+                              {(status === 'Held' ||
+                                status === 'Disputed' ||
+                                status === 'Released') && (
+                                <button
+                                  disabled={!!busy}
+                                  onClick={() =>
+                                    setRefundFor(refundFor === order.id ? '' : order.id)
+                                  }
+                                >
+                                  Refund buyer…
                                 </button>
                               )}
                             </div>
                           </td>
                         </tr>
+
+                        {refundFor === order.id && (
+                          <tr>
+                            <td colSpan={7}>
+                              <RefundForm
+                                total={
+                                  number(order.total) ||
+                                  number(order.subtotal) + number(order.deliveryFee)
+                                }
+                                alreadyRefunded={number(order.refundedAmount)}
+                                busy={!!busy}
+                                error={error}
+                                onCancel={() => setRefundFor('')}
+                                onSubmit={async (form) => {
+                                  const done = await action(order.id, {
+                                    action: 'refund-order',
+                                    sellerOrderId: order.id,
+                                    amount: form.amount,
+                                    reason: form.reason,
+                                    viaPaystack: form.viaPaystack,
+                                  })
+
+                                  if (done) setRefundFor('')
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        )}
 
                         {threadFor === order.id && (
                           <tr>
