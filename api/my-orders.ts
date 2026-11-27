@@ -6,7 +6,7 @@ import {
 } from 'firebase-admin/app'
 
 import { getAuth } from 'firebase-admin/auth'
-import { getFirestore } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 
 import type {
   VercelRequest,
@@ -84,8 +84,8 @@ export default async function handler(
 ) {
   res.setHeader('Cache-Control', 'no-store')
 
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST')
 
     return res.status(405).json({
       error: 'Method not allowed.',
@@ -109,6 +109,97 @@ export default async function handler(
     )
 
     const uid = decodedToken.uid
+
+    // BUYER RESPONSE: confirm receipt (releases payout) or report a problem.
+    if (req.method === 'POST') {
+      const body = (req.body && typeof req.body === 'object'
+        ? req.body
+        : {}) as Record<string, unknown>
+
+      const sellerOrderId =
+        typeof body.sellerOrderId === 'string' ? body.sellerOrderId.trim() : ''
+      const action = body.action
+      const reason =
+        typeof body.reason === 'string' ? body.reason.trim() : ''
+
+      if (!sellerOrderId || sellerOrderId.length > 150) {
+        return res.status(400).json({ error: 'A valid order is required.' })
+      }
+
+      if (action !== 'confirm' && action !== 'dispute') {
+        return res.status(400).json({ error: 'Invalid action.' })
+      }
+
+      if (action === 'dispute' && (reason.length < 10 || reason.length > 500)) {
+        return res.status(400).json({
+          error: 'Please describe the problem in 10 to 500 characters.',
+        })
+      }
+
+      const orderRef = database.collection('sellerOrders').doc(sellerOrderId)
+
+      const outcome = await database.runTransaction(async (tx) => {
+        const snap = await tx.get(orderRef)
+
+        if (!snap.exists) return 'NOT_FOUND'
+
+        const order = snap.data()!
+
+        // Only the buyer who placed this order may respond.
+        if (order.customerId !== uid) return 'NOT_FOUND'
+        if (order.paymentStatus !== 'Paid') return 'NOT_PAID'
+        if (order.status !== 'Shipped' && order.status !== 'Delivered') {
+          return 'NOT_SHIPPED'
+        }
+
+        const payout = order.payoutStatus || 'Held'
+
+        if (payout !== 'Held') return payout === 'Disputed' ? 'DISPUTED' : 'DONE'
+
+        const now = FieldValue.serverTimestamp()
+
+        if (action === 'confirm') {
+          const patch: Record<string, unknown> = {
+            status: 'Delivered',
+            payoutStatus: 'Released',
+            payoutReleasedAt: now,
+            payoutReleaseReason: 'Confirmed by buyer: package received',
+            buyerConfirmedAt: now,
+            autoReleaseAt: FieldValue.delete(),
+            updatedAt: now,
+          }
+
+          if (!order.deliveredAt) patch.deliveredAt = now
+
+          tx.update(orderRef, patch)
+        } else {
+          tx.update(orderRef, {
+            payoutStatus: 'Disputed',
+            disputeReason: reason,
+            disputedAt: now,
+            autoReleaseAt: FieldValue.delete(),
+            updatedAt: now,
+          })
+        }
+
+        return 'OK'
+      })
+
+      const messages: Record<string, [number, string]> = {
+        NOT_FOUND: [404, 'Order not found.'],
+        NOT_PAID: [400, 'This order has not been paid.'],
+        NOT_SHIPPED: [400, 'You can respond once the order has been shipped.'],
+        DONE: [400, 'You have already confirmed this order.'],
+        DISPUTED: [400, 'A problem was already reported for this order.'],
+      }
+
+      if (outcome !== 'OK') {
+        const [status, error] = messages[outcome] || [400, 'Could not update this order.']
+        return res.status(status).json({ error })
+      }
+
+      return res.status(200).json({ success: true })
+    }
 
     const [orderSnapshot, packageSnapshot] = await Promise.all([
       database
@@ -150,6 +241,13 @@ export default async function handler(
         shippedAt: toSeconds(data.shippedAt),
         deliveredAt: toSeconds(data.deliveredAt),
         updatedAt: toSeconds(data.updatedAt),
+        payoutStatus:
+          data.payoutStatus === 'Disputed'
+            ? 'Disputed'
+            : ['Released', 'Paid Out'].includes(data.payoutStatus)
+              ? 'Released'
+              : 'Held',
+        autoReleaseAt: toSeconds(data.autoReleaseAt),
       }
 
       const list = packagesByOrder.get(orderId) || []
