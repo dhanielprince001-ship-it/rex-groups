@@ -10,6 +10,7 @@ import { getAuth } from 'firebase-admin/auth'
 import {
   getFirestore,
   FieldValue,
+  Timestamp,
 } from 'firebase-admin/firestore'
 
 import type {
@@ -212,6 +213,16 @@ export default async function handler(
 
         if (newStatus === 'Delivered') {
           updateData.deliveredAt = FieldValue.serverTimestamp()
+
+          // Start the buyer's confirmation window. Money stays held until the
+          // buyer confirms, reports a problem, or this date passes.
+          if (!order.payoutStatus || order.payoutStatus === 'Held') {
+            const days = Number(process.env.PAYOUT_AUTO_RELEASE_DAYS) || 3
+            updateData.payoutStatus = 'Held'
+            updateData.autoReleaseAt = Timestamp.fromMillis(
+              Date.now() + days * 86_400_000,
+            )
+          }
         }
 
         transaction.update(orderRef, updateData)
