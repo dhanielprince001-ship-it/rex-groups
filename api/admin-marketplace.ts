@@ -931,6 +931,12 @@ export default async function handler(
           updatedAt: FieldValue.serverTimestamp(),
         }
 
+        if (viaPaystack && paystackRefundId) {
+          // Lets the Paystack webhook find this order when the refund progresses.
+          patch.lastPaystackRefundId = paystackRefundId
+          patch.refundProviderStatus = 'Requested'
+        }
+
         if (full) {
           patch.payoutStatus = 'Cancelled'
           patch.payoutCancelledAt = FieldValue.serverTimestamp()
