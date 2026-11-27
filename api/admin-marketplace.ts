@@ -3,6 +3,7 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { v2 as cloudinary } from 'cloudinary'
+import { timingSafeEqual } from 'node:crypto'
 
 const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
@@ -101,6 +102,197 @@ async function releaseDuePayouts(db: FirebaseFirestore.Firestore) {
   return released
 }
 
+
+// Best-effort email via Resend. Never throws, so a mail problem can never
+// affect a payment or an order. Skipped when RESEND_API_KEY / BDS_NOTIFY_FROM are unset.
+async function sendMail(to: string, subject: string, text: string) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.BDS_NOTIFY_FROM
+
+  if (!key || !from || !to) return
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to: [to], subject, text }),
+    })
+  } catch (error) {
+    console.error('Email failed:', error)
+  }
+}
+const SITE = process.env.APP_BASE_URL || 'https://rex-groups.vercel.app'
+
+// Daily job (called by Vercel Cron): release due payouts, remind buyers who
+// have about a day left, and tell the admin how many payouts are ready.
+async function runDailyJob(db: FirebaseFirestore.Firestore) {
+  const released = await releaseDuePayouts(db)
+
+  const held = await db
+    .collection('sellerOrders')
+    .where('payoutStatus', '==', 'Held')
+    .limit(500)
+    .get()
+
+  const nowMs = Date.now()
+  let reminded = 0
+
+  for (const item of held.docs) {
+    const data = item.data()
+    const due = data.autoReleaseAt
+
+    if (
+      !(due instanceof Timestamp) ||
+      data.reminderSentAt ||
+      !data.customerEmail ||
+      due.toMillis() < nowMs ||
+      due.toMillis() - nowMs > 86_400_000
+    ) {
+      continue
+    }
+
+    await item.ref.update({ reminderSentAt: FieldValue.serverTimestamp() })
+
+    await sendMail(
+      String(data.customerEmail),
+      'Did you receive your order?',
+      `Your order from ${data.storeName || 'a seller'} will be confirmed automatically tomorrow.\n\nIf there is a problem, report it now in My orders: ${SITE}/marketplace/orders\nIf everything is fine, you can confirm receipt there too.`,
+    )
+
+    reminded++
+  }
+
+  if (released > 0) {
+    await sendMail(
+      process.env.BDS_ADMIN_EMAIL || 'rexgroups.uk@gmail.com',
+      `${released} seller payout(s) ready to pay`,
+      `${released} order(s) were auto-released today. Open the marketplace admin panel to pay the sellers and mark them as Paid Out.`,
+    )
+  }
+
+  return { released, reminded }
+}
+
+function validCronRequest(req: VercelRequest) {
+  const secret = process.env.CRON_SECRET
+  const header = req.headers.authorization
+
+  if (!secret || !header) return false
+
+  const a = Buffer.from(header)
+  const b = Buffer.from(`Bearer ${secret}`)
+
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+// ---------- DISPUTE CONVERSATION (buyer, seller and admin) ----------
+type DisputeDb = ReturnType<typeof getFirestore>
+type DisputeRole = 'buyer' | 'seller' | 'admin'
+const DISPUTE_MAX_MESSAGES = 200
+
+async function readDisputeThread(db: DisputeDb, orderId: string) {
+  const snap = await db
+    .collection('sellerOrders')
+    .doc(orderId)
+    .collection('disputeMessages')
+    .orderBy('createdAt', 'asc')
+    .limit(DISPUTE_MAX_MESSAGES)
+    .get()
+
+  return snap.docs.map((document) => {
+    const x = document.data()
+
+    return {
+      id: document.id,
+      role: String(x.role || ''),
+      authorName: String(x.authorName || ''),
+      text: String(x.text || ''),
+      createdAt:
+        x.createdAt && typeof x.createdAt.seconds === 'number'
+          ? (x.createdAt.seconds as number)
+          : 0,
+    }
+  })
+}
+
+// Returns an error message, or '' when the message was saved.
+async function addDisputeMessage(
+  db: DisputeDb,
+  orderId: string,
+  order: Record<string, unknown>,
+  role: DisputeRole,
+  authorName: string,
+  rawText: unknown,
+): Promise<string> {
+  const text = typeof rawText === 'string' ? rawText.trim() : ''
+
+  if (text.length < 1 || text.length > 1000) {
+    return 'Write a message of 1 to 1000 characters.'
+  }
+
+  const payout = String(order.payoutStatus || 'Held')
+
+  if (!order.disputeReason || !['Disputed', 'Held'].includes(payout)) {
+    return 'This dispute is closed.'
+  }
+
+  const ref = db.collection('sellerOrders').doc(orderId)
+  const total = (await ref.collection('disputeMessages').count().get()).data().count
+
+  if (total >= DISPUTE_MAX_MESSAGES) {
+    return 'This conversation has reached its message limit. Please contact Rex Groups.'
+  }
+
+  await ref.collection('disputeMessages').add({
+    role,
+    authorName: authorName.slice(0, 80) || role,
+    text,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  await ref.update({
+    disputeUpdatedAt: FieldValue.serverTimestamp(),
+    disputeLastRole: role,
+  })
+
+  return ''
+}
+
+// Emails the other two parties (best effort, never throws).
+async function notifyDisputeParties(
+  auth: ReturnType<typeof getAuth>,
+  order: Record<string, unknown>,
+  from: DisputeRole,
+  text: string,
+) {
+  try {
+    const adminEmail = process.env.BDS_ADMIN_EMAIL || 'rexgroups.uk@gmail.com'
+    const subject = 'New message on a disputed order'
+    const preview = text.length > 300 ? `${text.slice(0, 300)}…` : text
+    const who = from === 'buyer' ? 'The buyer' : from === 'seller' ? 'The seller' : 'Rex Groups'
+    const body = (link: string) => `${who} wrote:\n\n"${preview}"\n\nReply here: ${SITE}${link}`
+
+    if (from !== 'buyer' && order.customerEmail) {
+      await sendMail(String(order.customerEmail), subject, body('/marketplace/orders'))
+    }
+
+    if (from !== 'seller' && order.sellerId) {
+      const seller = await auth.getUser(String(order.sellerId))
+      await sendMail(seller.email || '', subject, body('/marketplace/seller'))
+    }
+
+    if (from !== 'admin') {
+      await sendMail(adminEmail, subject, body('/'))
+    }
+  } catch (error) {
+    console.error('Dispute notification failed:', error)
+  }
+}
+
+
 // Best-effort removal of images from Cloudinary. Never throws: the store is
 // already deleted by the time this runs, so a failure here is only reported.
 async function deleteCloudinaryImages(publicIds: string[]) {
@@ -154,6 +346,21 @@ export default async function handler(
 ) {
   res.setHeader('Cache-Control', 'no-store')
 
+  // Scheduled job: authenticated by CRON_SECRET, not by an admin login.
+  if (req.method === 'GET' && req.query.job === 'daily') {
+    if (!validCronRequest(req)) {
+      return res.status(401).json({ error: 'Unauthorized.' })
+    }
+
+    try {
+      const { db } = getFirebaseAdmin()
+      return res.status(200).json(await runDailyJob(db))
+    } catch (error) {
+      console.error('Daily job failed:', error)
+      return res.status(500).json({ error: 'Daily job failed.' })
+    }
+  }
+
   try {
     const adminToken = await verifyAdmin(req)
 
@@ -200,6 +407,13 @@ export default async function handler(
       }
 
       await batch.commit()
+    }
+
+    // GET ?thread=<id>: any dispute conversation.
+    if (req.method === 'GET' && typeof req.query.thread === 'string') {
+      return res.status(200).json({
+        messages: await readDisputeThread(db, req.query.thread.trim()),
+      })
     }
 
     // GET: Load marketplace administration data.
@@ -533,6 +747,27 @@ export default async function handler(
 
       // Money held for a seller order: release it, mark it paid out,
       // hold it again, or cancel it (refund to the buyer).
+      if (action === 'dispute-message') {
+        const orderId = typeof body.sellerOrderId === 'string' ? body.sellerOrderId.trim() : ''
+
+        if (!orderId || orderId.length > 150) {
+          return sendError(res, 400, 'A seller order is required')
+        }
+
+        const snap = await db.collection('sellerOrders').doc(orderId).get()
+        const order = snap.data()
+
+        if (!snap.exists || !order) return sendError(res, 404, 'Order not found')
+
+        const failure = await addDisputeMessage(db, orderId, order, 'admin', 'Rex Groups', body.text)
+
+        if (failure) return sendError(res, 400, failure)
+
+        await notifyDisputeParties(getAuth(), order, 'admin', String(body.text))
+
+        return res.status(200).json({ success: true })
+      }
+
       if (action === 'payout') {
         const sellerOrderId = body.sellerOrderId
         const operation = body.operation
