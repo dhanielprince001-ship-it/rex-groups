@@ -1,0 +1,14 @@
+
+.seller-earnings { margin: 0 0 28px; padding: 20px; border: 1px solid var(--rm-line, rgba(128,128,128,.35)); border-radius: 6px; background: var(--rm-paper, rgba(128,128,128,.06)); }
+.seller-earnings-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; align-items: baseline; }
+.seller-earnings-head small { opacity: .7; font-size: 12px; }
+.seller-earnings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 14px; }
+.seller-earnings-grid > div { padding: 14px; border: 1px solid var(--rm-line, rgba(128,128,128,.35)); border-radius: 5px; display: grid; gap: 3px; }
+.seller-earnings-grid span { font-size: 12px; opacity: .75; }
+.seller-earnings-grid strong { font-size: 22px; letter-spacing: -.5px; }
+.seller-earnings-grid small { font-size: 11px; opacity: .65; line-height: 1.4; }
+.seller-earnings-warn { margin: 12px 0 0; font-size: 13px; color: #c2410c; font-weight: 600; }
+.seller-earnings-chart { display: flex; align-items: flex-end; gap: 10px; height: 130px; margin-top: 18px; padding-top: 6px; }
+.seller-earnings-chart > div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; }
+.seller-earnings-chart i { display: block; width: 100%; max-width: 44px; background: var(--rm-accent, #b7e84b); border-radius: 3px 3px 0 0; min-height: 2px; }
+.seller-earnings-chart span { font-size: 11px; opacity: .7; }
