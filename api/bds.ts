@@ -194,6 +194,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (data.status === 'Cancelled') throw new HttpError(400, 'This request was cancelled.')
       const message = text(body.text, 'Message', 1, 2000)
       const role = admin ? 'admin' : 'client'
+
+      // Stop runaway or abusive conversations.
+      const sent = (await ref.collection('messages').count().get()).data().count
+      if (sent >= 300) {
+        throw new HttpError(429, 'This conversation is full. Please contact Rex Groups directly.')
+      }
       await ref.collection('messages').add({
         role,
         authorName: admin ? 'Rex Groups' : String(data.clientName || 'Client'),
