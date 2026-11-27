@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminRequestsPanel from './bds/AdminRequestsPanel'
+import AdminAlerts from './AdminAlerts'
 import {
   collection,
   deleteDoc,
@@ -864,6 +865,8 @@ export default function AdminDashboard() {
 
         {error && <p className="admin-error" role="alert">{error}</p>}
         {success && <p className="admin-success" role="status">{success}</p>}
+
+        <AdminAlerts />
 
         <AdminRequestsPanel />
 
