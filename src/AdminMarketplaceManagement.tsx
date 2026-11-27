@@ -1083,7 +1083,7 @@ export default function AdminMarketplaceManagement() {
                             )}
 
                             {order.refundStatus
-                              ? `${order.refundStatus}: ${money.format(number(order.refundedAmount))} `
+                              ? `${order.refundStatus}: ${money.format(number(order.refundedAmount))}${order.refundProviderStatus ? ` (Paystack: ${String(order.refundProviderStatus)}) ` : ' '}`
                               : null}
 
                             {status === 'Held' && order.autoReleaseAt?.seconds
