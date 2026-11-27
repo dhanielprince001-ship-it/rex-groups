@@ -78,6 +78,133 @@ function rollUpStatus(packages: PackageSummary[], fallback: string) {
   return 'Awaiting Fulfilment'
 }
 
+
+// Best-effort email via Resend. Never throws. Skipped when not configured.
+async function sendMail(to: string, subject: string, text: string) {
+  const key = process.env.RESEND_API_KEY
+  const from = process.env.BDS_NOTIFY_FROM
+
+  if (!key || !from || !to) return
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from, to: [to], subject, text }),
+    })
+  } catch (error) {
+    console.error('Email failed:', error)
+  }
+}
+const SITE = process.env.APP_BASE_URL || 'https://rex-groups.vercel.app'
+
+// ---------- DISPUTE CONVERSATION (buyer, seller and admin) ----------
+type DisputeDb = ReturnType<typeof getFirestore>
+type DisputeRole = 'buyer' | 'seller' | 'admin'
+const DISPUTE_MAX_MESSAGES = 200
+
+async function readDisputeThread(db: DisputeDb, orderId: string) {
+  const snap = await db
+    .collection('sellerOrders')
+    .doc(orderId)
+    .collection('disputeMessages')
+    .orderBy('createdAt', 'asc')
+    .limit(DISPUTE_MAX_MESSAGES)
+    .get()
+
+  return snap.docs.map((document) => {
+    const x = document.data()
+
+    return {
+      id: document.id,
+      role: String(x.role || ''),
+      authorName: String(x.authorName || ''),
+      text: String(x.text || ''),
+      createdAt:
+        x.createdAt && typeof x.createdAt.seconds === 'number'
+          ? (x.createdAt.seconds as number)
+          : 0,
+    }
+  })
+}
+
+// Returns an error message, or '' when the message was saved.
+async function addDisputeMessage(
+  db: DisputeDb,
+  orderId: string,
+  order: Record<string, unknown>,
+  role: DisputeRole,
+  authorName: string,
+  rawText: unknown,
+): Promise<string> {
+  const text = typeof rawText === 'string' ? rawText.trim() : ''
+
+  if (text.length < 1 || text.length > 1000) {
+    return 'Write a message of 1 to 1000 characters.'
+  }
+
+  const payout = String(order.payoutStatus || 'Held')
+
+  if (!order.disputeReason || !['Disputed', 'Held'].includes(payout)) {
+    return 'This dispute is closed.'
+  }
+
+  const ref = db.collection('sellerOrders').doc(orderId)
+  const total = (await ref.collection('disputeMessages').count().get()).data().count
+
+  if (total >= DISPUTE_MAX_MESSAGES) {
+    return 'This conversation has reached its message limit. Please contact Rex Groups.'
+  }
+
+  await ref.collection('disputeMessages').add({
+    role,
+    authorName: authorName.slice(0, 80) || role,
+    text,
+    createdAt: FieldValue.serverTimestamp(),
+  })
+
+  await ref.update({
+    disputeUpdatedAt: FieldValue.serverTimestamp(),
+    disputeLastRole: role,
+  })
+
+  return ''
+}
+
+// Emails the other two parties (best effort, never throws).
+async function notifyDisputeParties(
+  auth: ReturnType<typeof getAuth>,
+  order: Record<string, unknown>,
+  from: DisputeRole,
+  text: string,
+) {
+  try {
+    const adminEmail = process.env.BDS_ADMIN_EMAIL || 'rexgroups.uk@gmail.com'
+    const subject = 'New message on a disputed order'
+    const preview = text.length > 300 ? `${text.slice(0, 300)}…` : text
+    const who = from === 'buyer' ? 'The buyer' : from === 'seller' ? 'The seller' : 'Rex Groups'
+    const body = (link: string) => `${who} wrote:\n\n"${preview}"\n\nReply here: ${SITE}${link}`
+
+    if (from !== 'buyer' && order.customerEmail) {
+      await sendMail(String(order.customerEmail), subject, body('/marketplace/orders'))
+    }
+
+    if (from !== 'seller' && order.sellerId) {
+      const seller = await auth.getUser(String(order.sellerId))
+      await sendMail(seller.email || '', subject, body('/marketplace/seller'))
+    }
+
+    if (from !== 'admin') {
+      await sendMail(adminEmail, subject, body('/'))
+    }
+  } catch (error) {
+    console.error('Dispute notification failed:', error)
+  }
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -110,6 +237,18 @@ export default async function handler(
 
     const uid = decodedToken.uid
 
+    // GET ?thread=<sellerOrderId>: the dispute conversation for this buyer's order.
+    if (req.method === 'GET' && typeof req.query.thread === 'string') {
+      const threadId = req.query.thread.trim()
+      const snap = await database.collection('sellerOrders').doc(threadId).get()
+
+      if (!snap.exists || snap.data()?.customerId !== uid) {
+        return res.status(404).json({ error: 'Order not found.' })
+      }
+
+      return res.status(200).json({ messages: await readDisputeThread(database, threadId) })
+    }
+
     // BUYER RESPONSE: confirm receipt (releases payout) or report a problem.
     if (req.method === 'POST') {
       const body = (req.body && typeof req.body === 'object'
@@ -124,6 +263,26 @@ export default async function handler(
 
       if (!sellerOrderId || sellerOrderId.length > 150) {
         return res.status(400).json({ error: 'A valid order is required.' })
+      }
+
+      if (action === 'message') {
+        const snap = await database.collection('sellerOrders').doc(sellerOrderId).get()
+        const order = snap.data()
+
+        if (!snap.exists || !order || order.customerId !== uid) {
+          return res.status(404).json({ error: 'Order not found.' })
+        }
+
+        const failure = await addDisputeMessage(
+          database, sellerOrderId, order, 'buyer',
+          String(order.customerName || 'Buyer'), body.text,
+        )
+
+        if (failure) return res.status(400).json({ error: failure })
+
+        await notifyDisputeParties(getAuth(app), order, 'buyer', String(body.text))
+
+        return res.status(200).json({ success: true })
       }
 
       if (action !== 'confirm' && action !== 'dispute') {
@@ -196,6 +355,27 @@ export default async function handler(
       if (outcome !== 'OK') {
         const [status, error] = messages[outcome] || [400, 'Could not update this order.']
         return res.status(status).json({ error })
+      }
+
+      // A reported problem starts the conversation with the buyer's reason.
+      if (action === 'dispute') {
+        try {
+          const fresh = await orderRef.get()
+          const order = fresh.data()
+
+          if (order) {
+            await orderRef.collection('disputeMessages').add({
+              role: 'buyer',
+              authorName: String(order.customerName || 'Buyer').slice(0, 80),
+              text: reason,
+              createdAt: FieldValue.serverTimestamp(),
+            })
+
+            await notifyDisputeParties(getAuth(app), order, 'buyer', reason)
+          }
+        } catch (error) {
+          console.error('Dispute thread start failed:', error)
+        }
       }
 
       return res.status(200).json({ success: true })
