@@ -8,6 +8,7 @@ import { useAuth } from './AuthPanel'
 import { bdsApi } from './bds/api'
 import { SERVICES } from './bds/catalog'
 import ServiceRequestForm from './bds/ServiceRequestForm'
+import QuoteCard from './bds/QuoteCard'
 import { fmtDate, fmtDateTime, statusClass, toDate, type BdsMessage, type BdsRequest, type BdsUpdate } from './bds/types'
 import './bds.css'
 
@@ -157,6 +158,8 @@ function RequestDetail({ request }: { request: BdsRequest }) {
 
       <label className="bds-muted">Progress: {request.progress}%</label>
       <div className="bds-progress big"><i style={{ width: `${request.progress}%` }} /></div>
+
+      <QuoteCard request={request} user={user} />
 
       <h4>Updates</h4>
       <ol className="bds-timeline">
