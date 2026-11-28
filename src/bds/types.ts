@@ -41,6 +41,7 @@ export interface BdsAttachment {
   publicId: string
   name: string
   size: number
+  kind?: 'image' | 'pdf'
 }
 
 export interface BdsRequest {
