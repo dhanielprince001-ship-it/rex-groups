@@ -70,6 +70,8 @@ function rollUpStatus(packages: PackageSummary[], fallback: string) {
 
   const statuses = packages.map((p) => p.status)
 
+  if (statuses.every((status) => status === 'Cancelled')) return 'Cancelled'
+
   if (statuses.every((status) => status === 'Delivered')) return 'Delivered'
 
   if (statuses.every((status) => status === 'Awaiting Payment')) {
@@ -265,6 +267,63 @@ export default async function handler(
       const body = (req.body && typeof req.body === 'object'
         ? req.body
         : {}) as Record<string, unknown>
+
+      // Cancel an order that was never paid.
+      if (body.action === 'cancel-unpaid') {
+        const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : ''
+
+        if (!orderId || orderId.length > 150) {
+          return res.status(400).json({ error: 'A valid order is required.' })
+        }
+
+        const orderRef = database.collection('orders').doc(orderId)
+
+        const cancelled = await database.runTransaction(async (tx) => {
+          const snap = await tx.get(orderRef)
+
+          if (!snap.exists || snap.data()?.customerId !== uid) return 'NOT_FOUND'
+
+          const order = snap.data()!
+
+          if (order.paymentStatus === 'Paid') return 'PAID'
+          if (order.status !== 'Awaiting Payment') return 'NOT_CANCELLABLE'
+
+          const refs = (Array.isArray(order.sellerOrderIds) ? order.sellerOrderIds : []).map(
+            (id: string) => database.collection('sellerOrders').doc(id),
+          )
+
+          // Reads first, then writes.
+          const snaps = []
+          for (const ref of refs) snaps.push(await tx.get(ref))
+
+          const now = FieldValue.serverTimestamp()
+
+          tx.update(orderRef, { status: 'Cancelled', cancelledAt: now, cancelledBy: 'buyer', updatedAt: now })
+
+          for (let index = 0; index < refs.length; index++) {
+            const ref = refs[index]
+
+            if (snaps[index].exists) {
+              tx.update(ref, { status: 'Cancelled', cancelledAt: now, updatedAt: now })
+            }
+          }
+
+          return 'OK'
+        })
+
+        const cancelMessages: Record<string, [number, string]> = {
+          NOT_FOUND: [404, 'Order not found.'],
+          PAID: [409, 'This order has already been paid, so it cannot be cancelled.'],
+          NOT_CANCELLABLE: [400, 'This order can no longer be cancelled.'],
+        }
+
+        if (cancelled !== 'OK') {
+          const [status, error] = cancelMessages[cancelled] || [400, 'Could not cancel this order.']
+          return res.status(status).json({ error })
+        }
+
+        return res.status(200).json({ success: true })
+      }
 
       const sellerOrderId =
         typeof body.sellerOrderId === 'string' ? body.sellerOrderId.trim() : ''
