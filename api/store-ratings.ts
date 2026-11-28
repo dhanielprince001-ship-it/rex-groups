@@ -80,6 +80,196 @@ async function hasDeliveredOrder(
   )
 }
 
+// A buyer may review a product once an order containing it was delivered
+// (and not refunded in full).
+async function hasDeliveredProduct(
+  database: ReturnType<typeof getFirestore>,
+  uid: string,
+  product: { id: string; storeId: string },
+) {
+  const snapshot = await database
+    .collection('sellerOrders')
+    .where('customerId', '==', uid)
+    .where('sellerId', '==', product.storeId)
+    .limit(100)
+    .get()
+
+  return snapshot.docs.some((item) => {
+    const data = item.data()
+
+    return (
+      data.status === 'Delivered' &&
+      data.refundStatus !== 'Refunded' &&
+      Array.isArray(data.items) &&
+      data.items.some(
+        (line: { productId?: string }) => line?.productId === product.id,
+      )
+    )
+  })
+}
+
+// GET /api/store-ratings?productId=...  -> public product reviews (+ canReview when signed in)
+async function productReviewsGet(
+  req: VercelRequest,
+  res: VercelResponse,
+  app: ReturnType<typeof getFirebaseAdmin>,
+  database: ReturnType<typeof getFirestore>,
+  productId: string,
+) {
+  const productSnap = await database.collection('products').doc(productId).get()
+
+  if (!productSnap.exists || productSnap.data()?.status !== 'Approved') {
+    return res.status(404).json({ error: 'Product not found.' })
+  }
+
+  const product = productSnap.data()!
+
+  const reviewSnap = await database
+    .collection('productReviews')
+    .where('productId', '==', productId)
+    .limit(200)
+    .get()
+
+  const reviews = reviewSnap.docs
+    .map((item) => {
+      const data = item.data()
+
+      return {
+        id: item.id,
+        customerId: String(data.customerId || ''),
+        rating: Number(data.rating) || 0,
+        comment: typeof data.comment === 'string' ? data.comment : '',
+        customerName: publicName(data.customerName),
+        createdAt: data.createdAt?.seconds ?? 0,
+      }
+    })
+    .sort((a, b) => b.createdAt - a.createdAt)
+
+  const uid = await getSignedInUid(req, app)
+
+  let canReview = false
+  let myReview: { rating: number; comment: string } | null = null
+
+  if (uid && uid !== product.ownerId) {
+    canReview = await hasDeliveredProduct(database, uid, {
+      id: productId,
+      storeId: String(product.storeId || product.ownerId || ''),
+    })
+
+    const mine = reviews.find((entry) => entry.customerId === uid)
+
+    if (mine) myReview = { rating: mine.rating, comment: mine.comment }
+  }
+
+  return res.status(200).json({
+    success: true,
+    average: typeof product.ratingAverage === 'number' ? product.ratingAverage : 0,
+    count: typeof product.ratingCount === 'number' ? product.ratingCount : 0,
+    canReview,
+    myReview,
+    // Never send customer ids to the browser.
+    reviews: reviews.slice(0, 50).map((entry) => ({
+      id: entry.id,
+      rating: entry.rating,
+      comment: entry.comment,
+      customerName: entry.customerName,
+      createdAt: entry.createdAt,
+    })),
+  })
+}
+
+// POST { productId, rating, comment } -> save or update my product review
+async function productReviewPost(
+  res: VercelResponse,
+  app: ReturnType<typeof getFirebaseAdmin>,
+  database: ReturnType<typeof getFirestore>,
+  uid: string,
+  body: Record<string, unknown>,
+) {
+  const productId = String(body.productId || '').trim()
+  const rating = Number(body.rating)
+  const comment = typeof body.comment === 'string' ? body.comment.trim() : ''
+
+  if (!productId || productId.length > 150) {
+    return res.status(400).json({ error: 'A product is required.' })
+  }
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Please choose a rating from 1 to 5 stars.' })
+  }
+
+  if (comment.length > 500) {
+    return res.status(400).json({ error: 'Your review can be up to 500 characters.' })
+  }
+
+  const productRef = database.collection('products').doc(productId)
+  const productSnap = await productRef.get()
+
+  if (!productSnap.exists || productSnap.data()?.status !== 'Approved') {
+    return res.status(404).json({ error: 'This product is not available.' })
+  }
+
+  const product = productSnap.data()!
+
+  if (uid === product.ownerId) {
+    return res.status(403).json({ error: 'You cannot review your own product.' })
+  }
+
+  const allowed = await hasDeliveredProduct(database, uid, {
+    id: productId,
+    storeId: String(product.storeId || product.ownerId || ''),
+  })
+
+  if (!allowed) {
+    return res.status(403).json({
+      error: 'You can review a product after you have received it.',
+    })
+  }
+
+  const userRecord = await getAuth(app).getUser(uid)
+  const reviewRef = database.collection('productReviews').doc(`${productId}_${uid}`)
+
+  const result = await database.runTransaction(async (tx) => {
+    const fresh = await tx.get(productRef)
+    const existing = await tx.get(reviewRef)
+
+    if (!fresh.exists || fresh.data()?.status !== 'Approved') {
+      throw new Error('PRODUCT_UNAVAILABLE')
+    }
+
+    let sum = Number(fresh.data()?.ratingSum) || 0
+    let count = Number(fresh.data()?.ratingCount) || 0
+
+    if (existing.exists) {
+      sum = sum - (Number(existing.data()?.rating) || 0) + rating
+    } else {
+      sum += rating
+      count += 1
+    }
+
+    const average = count > 0 ? Math.round((sum / count) * 10) / 10 : 0
+
+    tx.set(reviewRef, {
+      productId,
+      storeId: String(product.storeId || product.ownerId || ''),
+      customerId: uid,
+      customerName: userRecord.displayName || '',
+      rating,
+      comment,
+      createdAt: existing.exists
+        ? existing.data()?.createdAt ?? FieldValue.serverTimestamp()
+        : FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    tx.update(productRef, { ratingSum: sum, ratingCount: count, ratingAverage: average })
+
+    return { average, count }
+  })
+
+  return res.status(200).json({ success: true, average: result.average, count: result.count })
+}
+
 // GET  /api/store-ratings?storeId=...  -> public reviews (+ canRate when signed in)
 // POST /api/store-ratings { storeId, rating, comment } -> save or update my rating
 export default async function handler(
@@ -99,6 +289,10 @@ export default async function handler(
   try {
     const app = getFirebaseAdmin()
     const database = getFirestore(app)
+
+    if (req.method === 'GET' && typeof req.query.productId === 'string') {
+      return await productReviewsGet(req, res, app, database, req.query.productId.trim())
+    }
 
     if (req.method === 'GET') {
       const storeId = req.query.storeId
@@ -192,6 +386,11 @@ export default async function handler(
     }
 
     const body = req.body || {}
+
+    if (typeof body.productId === 'string') {
+      return await productReviewPost(res, app, database, uid, body)
+    }
+
     const storeId = body.storeId
     const rating = Number(body.rating)
 
@@ -288,6 +487,12 @@ export default async function handler(
       count: result.count,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'PRODUCT_UNAVAILABLE') {
+      return res.status(404).json({
+        error: 'This product is not available.',
+      })
+    }
+
     if (error instanceof Error && error.message === 'STORE_UNAVAILABLE') {
       return res.status(404).json({
         error: 'This store is not available.',
