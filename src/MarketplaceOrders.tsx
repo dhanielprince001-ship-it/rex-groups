@@ -17,6 +17,7 @@ import { useAuth } from './AuthPanel'
 import ThemeToggle from './ThemeToggle'
 import './delivery-confirm.css'
 import DisputeThread from './DisputeThread'
+import QuickRate from './QuickRate'
 
 type Seconds = { seconds?: number } | null
 
@@ -277,7 +278,7 @@ export default function MarketplaceOrders() {
       setDisputeText('')
       setActionMsg(
         action === 'confirm'
-          ? 'Thank you! Payment will now be released to the seller.'
+          ? 'Thank you! Payment will now be released to the seller. Please rate the store below.'
           : 'Your report was sent. Our team will review it and contact you.',
       )
 
@@ -556,14 +557,23 @@ export default function MarketplaceOrders() {
                             </p>
                           ) : null}
 
-                          {pack.status === 'Delivered' && pack.sellerId && (
-                            <Link
-                              className="rex-package-rate"
-                              to={`/marketplace/store/${pack.sellerId}#reviews`}
-                            >
-                              Rate this store
-                            </Link>
-                          )}
+                          {pack.status === 'Delivered' &&
+                            pack.sellerId &&
+                            (pack.refundStatus !== 'Refunded') && (
+                              <>
+                                <QuickRate
+                                  user={user}
+                                  storeId={pack.sellerId}
+                                  storeName={pack.storeName}
+                                />
+                                <Link
+                                  className="rex-package-rate"
+                                  to={`/marketplace/store/${pack.sellerId}#reviews`}
+                                >
+                                  See store reviews
+                                </Link>
+                              </>
+                            )}
 
                           {(pack.refundedAmount ?? 0) > 0 && (
                             <div className="rex-refund-card" role="status">
