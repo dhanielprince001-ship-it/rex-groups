@@ -1,9 +1,9 @@
-
 import { useEffect, useState, type FormEvent } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../AuthPanel'
 import { bdsApi } from './api'
+import { ADMIN_UID } from './types'
 
 interface StaffRow {
   id: string
@@ -15,6 +15,7 @@ interface StaffRow {
 // Owner-only: add, change or remove staff.
 export default function StaffPanel() {
   const { user } = useAuth()
+  const isOwner = user?.uid === ADMIN_UID
   const [rows, setRows] = useState<StaffRow[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('support')
@@ -59,7 +60,9 @@ export default function StaffPanel() {
       <p className="bds-muted">
         <strong>Support</strong> can answer clients, post progress updates and reply in order disputes.{' '}
         <strong>Manager</strong> can also approve or reject requests, assign work, send quotes, record payments and manage
-        clients and services. Neither role can pay out sellers, refund buyers or change marketplace settings.
+        clients and services. Neither can pay out sellers, refund buyers or change marketplace settings.{' '}
+        <strong>Administrator</strong> has full access, including payouts, refunds and sellers. Only the owner can add or
+        remove administrators.
       </p>
 
       <form className="bds-row" onSubmit={add}>
@@ -74,6 +77,7 @@ export default function StaffPanel() {
         <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role" style={{ width: 'auto' }}>
           <option value="support">Support</option>
           <option value="manager">Manager</option>
+          {isOwner && <option value="admin">Administrator</option>}
         </select>
         <button className="button button-primary" type="submit" disabled={busy === 'add' || !email.trim()}>
           {busy === 'add' ? 'Saving…' : 'Add'}
@@ -93,19 +97,20 @@ export default function StaffPanel() {
                 <td>
                   <select
                     value={r.role}
-                    disabled={!!busy}
+                    disabled={!!busy || (r.role === 'admin' && !isOwner)}
                     aria-label={`Role for ${r.email}`}
                     style={{ width: 'auto' }}
                     onChange={(e) => void run(r.id, 'saveStaff', { email: r.email, role: e.target.value }, 'Role updated.')}
                   >
                     <option value="support">Support</option>
                     <option value="manager">Manager</option>
+                    {(isOwner || r.role === 'admin') && <option value="admin">Administrator</option>}
                   </select>
                 </td>
                 <td>
                   <button
                     className="text-link bds-linkbtn"
-                    disabled={!!busy}
+                    disabled={!!busy || (r.role === 'admin' && !isOwner)}
                     onClick={() => {
                       if (window.confirm(`Remove staff access for ${r.email}?`)) {
                         void run(r.id, 'removeStaff', { staffId: r.id }, 'Staff access removed.')
