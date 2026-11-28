@@ -40,7 +40,15 @@ async function verifyAdmin(req: VercelRequest) {
   const decodedToken = await auth.verifyIdToken(token)
 
   if (decodedToken.uid !== ADMIN_UID) {
-    throw new Error('Administrator access required')
+    // A co-administrator added by the owner (checked against the staff list,
+    // so removing them takes effect immediately).
+    const { db } = getFirebaseAdmin()
+    const staff = await db.collection('staff').doc(decodedToken.uid).get()
+    const data = staff.data()
+
+    if (!staff.exists || !data || data.active === false || data.role !== 'admin') {
+      throw new Error('Administrator access required')
+    }
   }
 
   return decodedToken
@@ -67,7 +75,7 @@ async function verifyStaffOrAdmin(req: VercelRequest) {
     !snap.exists ||
     !data ||
     data.active === false ||
-    !['support', 'manager'].includes(String(data.role))
+    !['support', 'manager', 'admin'].includes(String(data.role))
   ) {
     throw new Error('Staff access required')
   }
