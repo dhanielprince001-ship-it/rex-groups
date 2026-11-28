@@ -9,6 +9,9 @@ import { bdsApi } from './bds/api'
 import { SERVICES } from './bds/catalog'
 import AdminQuotePanel from './bds/AdminQuotePanel'
 import AttachmentList from './bds/AttachmentList'
+import DisputesPanel from './bds/DisputesPanel'
+import StaffPanel from './bds/StaffPanel'
+import { useStaffRole } from './bds/useStaffRole'
 import { BarChart, BarLegend, LineChart } from './bds/charts'
 import {
   ADMIN_UID, STATUSES, fmtDate, fmtDateTime, naira, statusClass, toDate,
@@ -16,7 +19,7 @@ import {
 } from './bds/types'
 import './bds.css'
 
-type Tab = 'requests' | 'clients' | 'services' | 'analytics' | 'activity'
+type Tab = 'requests' | 'disputes' | 'clients' | 'services' | 'analytics' | 'activity' | 'staff'
 interface Profile { id: string; name?: string; email?: string; phone?: string }
 
 const time = (r: BdsRequest) => toDate(r.updatedAt)?.getTime() ?? 0
@@ -38,30 +41,40 @@ function useCollection<T>(name: string, enabled: boolean, extra: ReturnType<type
 
 export default function AdminBdsDashboard() {
   const { user, ready } = useAuth()
-  const isAdmin = user?.uid === ADMIN_UID
+  const { role, level, loading: roleLoading } = useStaffRole()
+  const isStaff = level >= 1 // support, manager or owner
   const [tab, setTab] = useState<Tab>('requests')
 
-  const reqs = useCollection<BdsRequest>('bdsRequests', isAdmin)
-  const profiles = useCollection<Profile>('profiles', isAdmin)
-  const clientRecs = useCollection<BdsClientRecord>('bdsClients', isAdmin)
-  const svcs = useCollection<BdsServiceOverride>('bdsServices', isAdmin)
+  const reqs = useCollection<BdsRequest>('bdsRequests', isStaff)
+  const profiles = useCollection<Profile>('profiles', level >= 3)
+  const clientRecs = useCollection<BdsClientRecord>('bdsClients', level >= 2)
+  const svcs = useCollection<BdsServiceOverride>('bdsServices', isStaff)
   const [activity, setActivity] = useState<BdsActivity[]>([])
 
   useEffect(() => {
-    if (!db || !isAdmin) return
+    if (!db || !isStaff) return
     return onSnapshot(query(collection(db, 'bdsActivity'), orderBy('createdAt', 'desc'), limit(60)),
       (s) => setActivity(s.docs.map((d) => ({ id: d.id, ...d.data() }) as BdsActivity)), () => undefined)
-  }, [isAdmin])
+  }, [isStaff])
+
+  // Managers do not read the full customer list; build it from their requests instead.
+  const derivedClients = useMemo(() => {
+    const seen = new Map<string, Profile>()
+    for (const r of reqs.rows) {
+      if (!seen.has(r.clientId)) seen.set(r.clientId, { id: r.clientId, name: r.clientName, email: r.clientEmail })
+    }
+    return [...seen.values()]
+  }, [reqs.rows])
 
   const requests = useMemo(() => [...reqs.rows].sort((a, b) => time(b) - time(a)), [reqs.rows])
 
-  if (!ready) return <section className="section-wrap section-block bds"><p className="bds-muted">Loading…</p></section>
-  if (!isAdmin) {
+  if (!ready || roleLoading) return <section className="section-wrap section-block bds"><p className="bds-muted">Loading…</p></section>
+  if (!isStaff) {
     return (
       <section className="section-wrap section-block bds">
         <div className="bds-panel bds-center">
-          <h2>Administrator access only</h2>
-          <p className="bds-muted">{user ? 'This account is not authorised.' : 'Sign in with the administrator account.'}</p>
+          <h2>Staff access only</h2>
+          <p className="bds-muted">{user ? 'This account does not have staff access.' : 'Sign in with your staff account.'}</p>
           <Link className="button button-primary" to={user ? '/business-digital-solutions' : '/#account'}>{user ? 'Back' : 'Sign in'}</Link>
         </div>
       </section>
@@ -69,19 +82,27 @@ export default function AdminBdsDashboard() {
   }
 
   const awaiting = requests.filter((r) => ['Submitted', 'Under review'].includes(r.status)).length
-  const tabs: [Tab, string][] = [['requests', `Requests (${awaiting} new)`], ['clients', 'Clients'], ['services', 'Services'], ['analytics', 'Analytics'], ['activity', 'Activity']]
+  const tabs: [Tab, string][] = [
+    ['requests', `Requests (${awaiting} new)`],
+    ['disputes', 'Disputes'],
+    ...(level >= 2 ? ([['clients', 'Clients'], ['services', 'Services'], ['analytics', 'Analytics']] as [Tab, string][]) : []),
+    ['activity', 'Activity'],
+    ...(level >= 3 ? ([['staff', 'Staff']] as [Tab, string][]) : []),
+  ]
 
   return (
     <section className="section-wrap section-block bds">
-      <div className="section-kicker">ADMIN · BUSINESS DIGITAL SOLUTIONS</div>
+      <div className="section-kicker">{role === 'admin' ? 'ADMIN' : role.toUpperCase()} · BUSINESS DIGITAL SOLUTIONS</div>
       <div className="section-heading"><h2>Projects <em>control room.</em></h2></div>
       <div className="bds-tabs">{tabs.map(([k, label]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>)}</div>
       {reqs.error && <p className="bds-error" role="alert">{reqs.error}</p>}
 
-      {tab === 'requests' && <RequestsTab requests={requests} />}
-      {tab === 'clients' && <ClientsTab requests={requests} profiles={profiles.rows} records={clientRecs.rows} />}
-      {tab === 'services' && <ServicesTab overrides={svcs.rows} />}
-      {tab === 'analytics' && <AnalyticsTab requests={requests} />}
+      {tab === 'requests' && <RequestsTab requests={requests} level={level} />}
+      {tab === 'disputes' && <DisputesPanel />}
+      {tab === 'clients' && level >= 2 && <ClientsTab requests={requests} profiles={level >= 3 ? profiles.rows : derivedClients} records={clientRecs.rows} />}
+      {tab === 'services' && level >= 2 && <ServicesTab overrides={svcs.rows} />}
+      {tab === 'analytics' && level >= 2 && <AnalyticsTab requests={requests} />}
+      {tab === 'staff' && level >= 3 && <StaffPanel />}
       {tab === 'activity' && (
         <div className="bds-panel">
           <ul className="bds-activity">
@@ -94,7 +115,7 @@ export default function AdminBdsDashboard() {
   )
 }
 
-function RequestsTab({ requests }: { requests: BdsRequest[] }) {
+function RequestsTab({ requests, level }: { requests: BdsRequest[]; level: number }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | RequestStatus>('All')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -123,13 +144,13 @@ function RequestsTab({ requests }: { requests: BdsRequest[] }) {
             </button>
           ))}
         </div>
-        {selected ? <AdminDetail key={selected.id} request={selected} /> : <div className="bds-panel bds-center bds-muted">Select a request.</div>}
+        {selected ? <AdminDetail key={selected.id} request={selected} level={level} /> : <div className="bds-panel bds-center bds-muted">Select a request.</div>}
       </div>
     </>
   )
 }
 
-function AdminDetail({ request }: { request: BdsRequest }) {
+function AdminDetail({ request, level }: { request: BdsRequest; level: number }) {
   const { user } = useAuth()
   const [updates, setUpdates] = useState<BdsUpdate[]>([])
   const [messages, setMessages] = useState<BdsMessage[]>([])
@@ -173,6 +194,11 @@ function AdminDetail({ request }: { request: BdsRequest }) {
       <p>{request.description}</p>
       <div className="bds-meta"><span>Budget: {request.budget}</span><span>Timeline: {request.timeline}</span><span>Contact via: {request.contactMethod}</span></div>
 
+      {level < 2 && (
+        <p className="bds-muted">Support access: you can post progress updates and message the client. A manager decides approvals, quotes and payments.</p>
+      )}
+
+      {level >= 2 && (<>
       <h4>Decision</h4>
       <textarea rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note to client (required when rejecting)" aria-label="Status note" />
       <div className="bds-row">
@@ -188,10 +214,11 @@ function AdminDetail({ request }: { request: BdsRequest }) {
         <input value={assignee} onChange={(e) => setAssignee(e.target.value)} maxLength={80} placeholder="Assign to (team member)" aria-label="Assignee" />
         <button className="button bds-ghost" disabled={!!busy} onClick={() => void run('assign', 'assign', { assignee }, 'Assignment saved.')}>Save</button>
       </div>
+      </>)}
 
       <AttachmentList items={request.attachments} />
 
-      <AdminQuotePanel request={request} user={user} />
+      {level >= 2 && <AdminQuotePanel request={request} user={user} />}
 
       <h4>Progress update</h4>
       <label className="bds-muted">Progress: {progress}%<input type="range" min={0} max={100} step={5} value={progress} onChange={(e) => setProgress(Number(e.target.value))} /></label>
