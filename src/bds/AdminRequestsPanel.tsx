@@ -4,14 +4,14 @@ import { collection, onSnapshot } from 'firebase/firestore'
 import { ArrowUpRight } from 'lucide-react'
 
 import { db } from '../firebase'
-import { useAuth } from '../AuthPanel'
-import { ADMIN_UID, fmtDate, statusClass, toDate, type BdsRequest } from './types'
+import { fmtDate, statusClass, toDate, type BdsRequest } from './types'
+import { useStaffRole } from './useStaffRole'
 import '../bds.css'
 
 // Shows the latest Business Digital Solutions requests inside the main admin dashboard.
 export default function AdminRequestsPanel() {
-  const { user } = useAuth()
-  const isAdmin = user?.uid === ADMIN_UID
+  const { role } = useStaffRole()
+  const isAdmin = role === 'admin'
   const [rows, setRows] = useState<BdsRequest[]>([])
   const [error, setError] = useState('')
 
