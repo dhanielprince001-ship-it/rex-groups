@@ -6,13 +6,15 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 import { db } from './firebase'
 import { useAuth } from './AuthPanel'
-import { ADMIN_UID, type BdsRequest } from './bds/types'
+import type { BdsRequest } from './bds/types'
+import { useStaffRole } from './bds/useStaffRole'
 import './admin-alerts.css'
 
 // "Needs attention" bar at the top of the admin dashboard.
 export default function AdminAlerts() {
   const { user } = useAuth()
-  const isAdmin = user?.uid === ADMIN_UID
+  const { role } = useStaffRole()
+  const isAdmin = role === 'admin'
 
   const [newRequests, setNewRequests] = useState(0)
   const [awaitingReply, setAwaitingReply] = useState(0)
