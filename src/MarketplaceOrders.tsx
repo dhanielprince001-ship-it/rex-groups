@@ -252,6 +252,53 @@ export default function MarketplaceOrders() {
     return () => window.clearInterval(timer)
   }, [returning, user, load])
 
+  const [cancellingId, setCancellingId] = useState('')
+
+  async function cancelUnpaid(orderId: string) {
+    if (!user || cancellingId) return
+
+    if (
+      !window.confirm(
+        'Cancel this order? Nothing has been charged. You can place a new order any time.',
+      )
+    ) {
+      return
+    }
+
+    setCancellingId(orderId)
+    setPayError(null)
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/my-orders', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'cancel-unpaid', orderId }),
+      })
+
+      const data = await readJson(response)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Could not cancel this order.',
+        )
+      }
+
+      await load(true)
+    } catch (err) {
+      setPayError({
+        id: orderId,
+        text: err instanceof Error ? err.message : 'Could not cancel this order.',
+      })
+    } finally {
+      setCancellingId('')
+    }
+  }
+
   // Start (or restart) payment for an unpaid order.
   async function payNow(orderId: string) {
     if (!user || payingId) return
@@ -519,6 +566,15 @@ export default function MarketplaceOrders() {
                               : `Pay ${money.format(total)} now`}
                           </button>
 
+                          <button
+                            type="button"
+                            className="rex-pay-retry-cancel"
+                            disabled={!!cancellingId || payingId === order.id}
+                            onClick={() => void cancelUnpaid(order.id)}
+                          >
+                            {cancellingId === order.id ? 'Cancelling…' : 'Cancel this order'}
+                          </button>
+
                           {payError?.id === order.id && (
                             <p className="rex-pay-retry-error" role="alert">
                               {payError.text}
@@ -720,7 +776,10 @@ export default function MarketplaceOrders() {
                             ))}
                           </ul>
 
-                          <ol className="rex-tracker" aria-label="Order progress">
+                          {pack.status === 'Cancelled' ? (
+                            <p className="rex-order-note">This order was cancelled.</p>
+                          ) : (
+                            <ol className="rex-tracker" aria-label="Order progress">
                             {STEPS.map((step, index) => (
                               <li
                                 key={step}
@@ -748,8 +807,9 @@ export default function MarketplaceOrders() {
                               </li>
                             ))}
                           </ol>
+                          )}
 
-                          {pack.paymentStatus !== 'Paid' && (
+                          {pack.paymentStatus !== 'Paid' && pack.status !== 'Cancelled' && (
                             <p className="rex-order-note">
                               Waiting for secure payment confirmation. Your
                               order will move to fulfilment once payment is
