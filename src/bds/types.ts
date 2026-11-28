@@ -36,6 +36,13 @@ export interface BdsPayment {
 
 export const naira = (n: number) => `₦${Number(n || 0).toLocaleString()}`
 
+export interface BdsAttachment {
+  url: string
+  publicId: string
+  name: string
+  size: number
+}
+
 export interface BdsRequest {
   id: string
   clientId: string
@@ -54,6 +61,7 @@ export interface BdsRequest {
   assignee: string
   adminNote: string
   lastMessageRole: '' | 'client' | 'admin'
+  attachments?: BdsAttachment[]
   quote?: BdsQuote
   payment?: BdsPayment
   createdAt?: Stamp
