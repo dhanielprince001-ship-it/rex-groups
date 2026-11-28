@@ -173,7 +173,56 @@ async function runDailyJob(db: FirebaseFirestore.Firestore) {
     )
   }
 
-  return { released, reminded }
+  // Tidy up: cancel orders that were never paid after 7 days.
+  let expired = 0
+  const unpaid = await db
+    .collection('orders')
+    .where('status', '==', 'Awaiting Payment')
+    .limit(500)
+    .get()
+
+  const cutoff = Date.now() - 7 * 86_400_000
+
+  for (const item of unpaid.docs) {
+    const created = item.data().createdAt
+    const createdMs = created && typeof created.toMillis === 'function' ? created.toMillis() : 0
+
+    if (!createdMs || createdMs > cutoff) continue
+
+    try {
+      const done = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(item.ref)
+        const order = snap.data()
+
+        if (!order || order.paymentStatus === 'Paid' || order.status !== 'Awaiting Payment') {
+          return false
+        }
+
+        const refs = (Array.isArray(order.sellerOrderIds) ? order.sellerOrderIds : []).map(
+          (id: string) => db.collection('sellerOrders').doc(id),
+        )
+        const snaps = []
+        for (const ref of refs) snaps.push(await tx.get(ref))
+
+        const now = FieldValue.serverTimestamp()
+        tx.update(item.ref, { status: 'Cancelled', cancelledAt: now, cancelledBy: 'expired', updatedAt: now })
+
+        for (let index = 0; index < refs.length; index++) {
+            const ref = refs[index]
+
+          if (snaps[index].exists) tx.update(ref, { status: 'Cancelled', cancelledAt: now, updatedAt: now })
+        }
+
+        return true
+      })
+
+      if (done) expired++
+    } catch (error) {
+      console.error('Could not expire unpaid order:', error)
+    }
+  }
+
+  return { released, reminded, expired }
 }
 
 function validCronRequest(req: VercelRequest) {
