@@ -12,5 +12,11 @@
       "source": "/((?!api/|__/|assets/).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/admin-marketplace?job=daily",
+      "schedule": "0 7 * * *"
+    }
   ]
 }
