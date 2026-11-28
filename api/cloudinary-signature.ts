@@ -57,7 +57,7 @@ export default async function handler(
     // Existing product requests default to product uploads.
     const purpose = req.body?.purpose || 'product'
 
-    if (purpose !== 'product' && purpose !== 'store') {
+    if (purpose !== 'product' && purpose !== 'store' && purpose !== 'bds') {
       return res.status(400).json({
         error: 'Invalid upload purpose'
       })
@@ -118,10 +118,13 @@ export default async function handler(
 
     const timestamp = Math.floor(Date.now() / 1000)
 
+    // 'bds' = attachments on Digital Solutions requests (any signed-in client).
     const folder =
       purpose === 'store'
         ? `rexgroups/stores/${uid}`
-        : `rexgroups/products/${uid}`
+        : purpose === 'bds'
+          ? `rexgroups/bds/${uid}`
+          : `rexgroups/products/${uid}`
 
     const uploadParameters = {
       timestamp,
