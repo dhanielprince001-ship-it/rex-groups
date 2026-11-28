@@ -46,6 +46,50 @@ async function verifyAdmin(req: VercelRequest) {
   return decodedToken
 }
 
+// Support / manager staff may only use the dispute-conversation tools.
+// Everything else in this file stays owner-only.
+async function verifyStaffOrAdmin(req: VercelRequest) {
+  const authorization = req.headers.authorization
+
+  if (!authorization?.startsWith('Bearer ')) {
+    throw new Error('Authentication required')
+  }
+
+  const { auth, db } = getFirebaseAdmin()
+  const decodedToken = await auth.verifyIdToken(authorization.slice(7))
+
+  if (decodedToken.uid === ADMIN_UID) return decodedToken
+
+  const snap = await db.collection('staff').doc(decodedToken.uid).get()
+  const data = snap.data()
+
+  if (
+    !snap.exists ||
+    !data ||
+    data.active === false ||
+    !['support', 'manager'].includes(String(data.role))
+  ) {
+    throw new Error('Staff access required')
+  }
+
+  return decodedToken
+}
+
+function isStaffOperation(req: VercelRequest) {
+  if (req.method === 'GET') {
+    return (
+      req.query.summary !== '1' &&
+      (typeof req.query.thread === 'string' || req.query.disputes === '1')
+    )
+  }
+
+  if (req.method === 'PATCH') {
+    return (req.body as { action?: unknown } | undefined)?.action === 'dispute-message'
+  }
+
+  return false
+}
+
 // Firestore timestamps do not survive JSON.stringify (they become
 // { _seconds }), so convert them to { seconds } for the admin screen.
 function plain(value: unknown): unknown {
@@ -411,7 +455,9 @@ export default async function handler(
   }
 
   try {
-    const adminToken = await verifyAdmin(req)
+    const adminToken = isStaffOperation(req)
+      ? await verifyStaffOrAdmin(req)
+      : await verifyAdmin(req)
 
     const { db } = getFirebaseAdmin()
 
@@ -456,6 +502,32 @@ export default async function handler(
       }
 
       await batch.commit()
+    }
+
+    // GET ?disputes=1: disputed orders (no bank or payout details), for staff.
+    if (req.method === 'GET' && req.query.disputes === '1') {
+      const disputed = await db
+        .collection('sellerOrders')
+        .where('payoutStatus', '==', 'Disputed')
+        .limit(100)
+        .get()
+
+      return res.status(200).json({
+        orders: disputed.docs.map((item) => {
+          const x = item.data()
+
+          return plain({
+            id: item.id,
+            storeName: x.storeName || '',
+            customerName: x.customerName || '',
+            total: Number(x.total) || 0,
+            disputeReason: x.disputeReason || '',
+            disputeLastRole: x.disputeLastRole || '',
+            disputedAt: x.disputedAt || null,
+            updatedAt: x.updatedAt || null,
+          })
+        }),
+      })
     }
 
     // GET ?summary=1: small counts for the admin alert bar.
@@ -1316,7 +1388,8 @@ export default async function handler(
 
     const status =
       message === 'Authentication required' ||
-      message === 'Administrator access required'
+      message === 'Administrator access required' ||
+      message === 'Staff access required'
         ? 403
         : 500
 
