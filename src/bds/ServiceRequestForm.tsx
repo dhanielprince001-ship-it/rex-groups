@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { CheckCircle2, Loader2, Send } from 'lucide-react'
 import { useAuth } from '../AuthPanel'
 import { bdsApi } from './api'
+import { MAX_ATTACHMENTS, checkAttachment, uploadAttachment } from './uploads'
 import { SERVICES } from './catalog'
 import { BUDGETS, CONTACTS, TIMELINES, type ServiceId } from './types'
 
@@ -23,6 +24,8 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
   const [budget, setBudget] = useState<string>(BUDGETS[0])
   const [timeline, setTimeline] = useState<string>(TIMELINES[0])
   const [contactMethod, setContactMethod] = useState<string>(CONTACTS[0])
+  const [files, setFiles] = useState<File[]>([])
+  const [progress, setProgress] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
@@ -35,6 +38,25 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
 
   function toggle(id: ServiceId) {
     setServices((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
+  }
+
+  function addFiles(list: FileList | null) {
+    if (!list) return
+
+    const next = [...files]
+
+    for (const file of Array.from(list)) {
+      const problem = checkAttachment(file)
+
+      if (problem) return setError(problem)
+
+      if (next.length >= MAX_ATTACHMENTS) return setError(`You can attach up to ${MAX_ATTACHMENTS} images.`)
+
+      next.push(file)
+    }
+
+    setError('')
+    setFiles(next)
   }
 
   function validate() {
@@ -54,10 +76,21 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
     setBusy(true)
     setError('')
     try {
+      // Upload images first (one at a time), then send the request.
+      const attachments = []
+
+      for (let index = 0; index < files.length; index++) {
+        setProgress(`Uploading image ${index + 1} of ${files.length}…`)
+        attachments.push(await uploadAttachment(user, files[index]))
+      }
+
+      setProgress('')
+
       await bdsApi(user, 'createRequest', {
-        services, title, description, company, phone, budget, timeline, contactMethod,
+        services, title, description, company, phone, budget, timeline, contactMethod, attachments,
         clientName: user.displayName || user.email || '',
       })
+      setFiles([])
       setDone(true)
       setTitle('')
       setDescription('')
@@ -66,6 +99,7 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send your request.')
     } finally {
+      setProgress('')
       setBusy(false)
     }
   }
@@ -134,6 +168,35 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
         </label>
       </div>
 
+      <div className="bds-files">
+        <label>Attach images (optional, up to {MAX_ATTACHMENTS}, JPG/PNG/WEBP, 5MB each)
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            disabled={busy}
+            onChange={(e) => {
+              addFiles(e.target.files)
+              e.target.value = ''
+            }}
+          />
+        </label>
+
+        {files.length > 0 && (
+          <ul>
+            {files.map((file, index) => (
+              <li key={`${file.name}-${index}`}>
+                <span>{file.name} ({Math.max(1, Math.round(file.size / 1024))} KB)</span>
+                <button type="button" disabled={busy} onClick={() => setFiles(files.filter((_, i) => i !== index))}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {progress && <p className="bds-muted" role="status">{progress}</p>}
       {error && <p className="bds-error" role="alert">{error}</p>}
 
       <button className="button button-primary" disabled={busy} type="submit">
