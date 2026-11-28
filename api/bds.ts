@@ -96,8 +96,16 @@ function cleanAttachments(value: unknown, uid: string) {
   })
 }
 
-function isAdminToken(uid: string) {
-  return uid === ADMIN_UID
+// 0 = client, 1 = support, 2 = manager, 3 = owner (admin).
+async function staffLevel(db: ReturnType<typeof getFirestore>, uid: string): Promise<number> {
+  if (uid === ADMIN_UID) return 3
+
+  const snap = await db.collection('staff').doc(uid).get()
+  const data = snap.data()
+
+  if (!snap.exists || !data || data.active === false) return 0
+
+  return data.role === 'manager' ? 2 : data.role === 'support' ? 1 : 0
 }
 
 async function notify(to: string, subject: string, body: string) {
@@ -131,14 +139,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getFirestore(app)
     const decoded = await getAuth(app).verifyIdToken(header.slice(7))
     const uid = decoded.uid
-    const admin = isAdminToken(uid)
+    const level = await staffLevel(db, uid)
+    const admin = level >= 1 // any staff member or the owner
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>
     const action = typeof body.action === 'string' ? body.action : ''
 
     const logActivity = (requestId: string, summary: string) =>
       db.collection('bdsActivity').add({
         actorId: uid,
-        actorRole: admin ? 'admin' : 'client',
+        actorRole: level === 3 ? 'admin' : level === 2 ? 'manager' : level === 1 ? 'support' : 'client',
         requestId,
         summary,
         createdAt: FieldValue.serverTimestamp(),
@@ -154,8 +163,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return { ref, data, id }
     }
 
-    const requireAdmin = () => {
-      if (!admin) throw new HttpError(403, 'Administrator access required.')
+    // 1 = support, 2 = manager, 3 = owner only.
+    const requireLevel = (needed: number) => {
+      if (level < needed) throw new HttpError(403, 'You do not have permission to do this.')
     }
 
     // ---------- CLIENT ACTIONS ----------
@@ -265,7 +275,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ---------- ADMIN ACTIONS ----------
 
     if (action === 'setStatus') {
-      requireAdmin()
+      requireLevel(2)
       const { ref, data, id } = await loadRequest()
       const status = oneOf(body.status, STATUSES, 'status')
       if (status === 'Cancelled') throw new HttpError(400, 'Only the client can cancel a request.')
@@ -288,7 +298,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'assign') {
-      requireAdmin()
+      requireLevel(2)
       const { ref, data, id } = await loadRequest()
       const assignee = optionalText(body.assignee, 'Assignee', 80)
       await ref.update({ assignee, updatedAt: FieldValue.serverTimestamp() })
@@ -297,7 +307,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'sendQuote') {
-      requireAdmin()
+      requireLevel(2)
       const { ref, data, id } = await loadRequest()
 
       if (['Rejected', 'Cancelled', 'Completed'].includes(String(data.status))) {
@@ -385,7 +395,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'recordPayment') {
-      requireAdmin()
+      requireLevel(2)
       const { ref, data, id } = await loadRequest()
       const quote = data.quote as { status?: string; amount?: number } | undefined
 
@@ -432,7 +442,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'addUpdate') {
-      requireAdmin()
+      requireLevel(1)
       const { ref, data, id } = await loadRequest()
       const message = text(body.text, 'Update', 3, 1000)
       const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() }
@@ -453,7 +463,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'saveService') {
-      requireAdmin()
+      requireLevel(2)
       const id = oneOf(body.id, SERVICE_IDS, 'service')
       if (typeof body.active !== 'boolean') throw new HttpError(400, 'Active must be true or false.')
       await db.collection('bdsServices').doc(id).set({
@@ -467,7 +477,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'saveClient') {
-      requireAdmin()
+      requireLevel(2)
       const clientId = text(body.clientId, 'Client', 1, 128)
       if (typeof body.blocked !== 'boolean') throw new HttpError(400, 'Blocked must be true or false.')
       await db.collection('bdsClients').doc(clientId).set({
@@ -476,6 +486,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true })
       await logActivity('', `Client record updated (${clientId.slice(0, 6)}…)`)
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'saveStaff') {
+      requireLevel(3)
+      const email = text(body.email, 'Email', 5, 254).toLowerCase()
+      const role = oneOf(body.role, ['support', 'manager'], 'role')
+
+      let account
+      try {
+        account = await getAuth(app).getUserByEmail(email)
+      } catch {
+        throw new HttpError(404, 'No account uses that email. Ask them to register on the website first.')
+      }
+
+      if (account.uid === ADMIN_UID) throw new HttpError(400, 'That is the owner account.')
+
+      await db.collection('staff').doc(account.uid).set({
+        email,
+        name: account.displayName || '',
+        role,
+        active: true,
+        addedBy: uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true })
+      await logActivity('', `Staff ${email} set to ${role}`)
+      return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'removeStaff') {
+      requireLevel(3)
+      const staffId = text(body.staffId, 'Staff member', 1, 128)
+      await db.collection('staff').doc(staffId).delete()
+      await logActivity('', `Staff access removed (${staffId.slice(0, 6)}…)`)
       return res.status(200).json({ ok: true })
     }
 
