@@ -105,7 +105,19 @@ async function staffLevel(db: ReturnType<typeof getFirestore>, uid: string): Pro
 
   if (!snap.exists || !data || data.active === false) return 0
 
-  return data.role === 'manager' ? 2 : data.role === 'support' ? 1 : 0
+  return data.role === 'admin' ? 3 : data.role === 'manager' ? 2 : data.role === 'support' ? 1 : 0
+}
+
+// Administrators also carry a custom sign-in claim, which the Firestore rules use.
+async function setAdminClaim(app: ReturnType<typeof adminApp>, targetUid: string, on: boolean) {
+  const auth = getAuth(app)
+  const user = await auth.getUser(targetUid)
+  const claims = { ...(user.customClaims || {}) } as Record<string, unknown>
+
+  if (on) claims.admin = true
+  else delete claims.admin
+
+  await auth.setCustomUserClaims(targetUid, claims)
 }
 
 async function notify(to: string, subject: string, body: string) {
@@ -492,7 +504,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'saveStaff') {
       requireLevel(3)
       const email = text(body.email, 'Email', 5, 254).toLowerCase()
-      const role = oneOf(body.role, ['support', 'manager'], 'role')
+      const role = oneOf(body.role, ['support', 'manager', 'admin'], 'role')
+      const isOwner = uid === ADMIN_UID
 
       let account
       try {
@@ -503,6 +516,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (account.uid === ADMIN_UID) throw new HttpError(400, 'That is the owner account.')
 
+      // Only the owner may create, change or remove administrators.
+      const before = await db.collection('staff').doc(account.uid).get()
+      const beforeRole = before.data()?.role
+
+      if ((role === 'admin' || beforeRole === 'admin') && !isOwner) {
+        throw new HttpError(403, 'Only the owner can add or change administrators.')
+      }
+
       await db.collection('staff').doc(account.uid).set({
         email,
         name: account.displayName || '',
@@ -511,6 +532,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         addedBy: uid,
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true })
+      if (role === 'admin' || beforeRole === 'admin') {
+        await setAdminClaim(app, account.uid, role === 'admin')
+      }
+
       await logActivity('', `Staff ${email} set to ${role}`)
       return res.status(200).json({ ok: true })
     }
@@ -518,7 +543,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'removeStaff') {
       requireLevel(3)
       const staffId = text(body.staffId, 'Staff member', 1, 128)
-      await db.collection('staff').doc(staffId).delete()
+      const staffRef = db.collection('staff').doc(staffId)
+      const staffBefore = (await staffRef.get()).data()?.role
+
+      if (staffBefore === 'admin' && uid !== ADMIN_UID) {
+        throw new HttpError(403, 'Only the owner can remove an administrator.')
+      }
+
+      await staffRef.delete()
+
+      if (staffBefore === 'admin') {
+        try {
+          await setAdminClaim(app, staffId, false)
+          await getAuth(app).revokeRefreshTokens(staffId)
+        } catch (error) {
+          console.error('Could not clear administrator claim:', error)
+        }
+      }
+
       await logActivity('', `Staff access removed (${staffId.slice(0, 6)}…)`)
       return res.status(200).json({ ok: true })
     }
