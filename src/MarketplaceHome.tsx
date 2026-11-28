@@ -89,7 +89,7 @@ export default function MarketplaceHome() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   // Search and filters live in the web address, so a search can be shared or bookmarked.
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [category, setCategory] = useState(() => {
     const fromUrl = params.get('category')
@@ -234,7 +234,8 @@ export default function MarketplaceHome() {
     setSort('featured')
   }
 
-  // Keep the address bar in step with the filters (no new history entries).
+  // Keep the address bar in step with the filters. This uses the browser's own
+  // history call (not the router), so typing never scrolls the page to the top.
   useEffect(() => {
     const next = new URLSearchParams()
 
@@ -245,8 +246,13 @@ export default function MarketplaceHome() {
     if (minRating !== '0') next.set('rating', minRating)
     if (sort !== 'featured') next.set('sort', sort)
 
-    setParams(next, { replace: true })
-  }, [search, category, priceMin, priceMax, minRating, sort, setParams])
+    const queryString = next.toString()
+    const url = `${window.location.pathname}${queryString ? `?${queryString}` : ''}${window.location.hash}`
+
+    if (url !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, '', url)
+    }
+  }, [search, category, priceMin, priceMax, minRating, sort])
 
   const filteredStores = useMemo(() => {
     const term = search.trim().toLowerCase()
