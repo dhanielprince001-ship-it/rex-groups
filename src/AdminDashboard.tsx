@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AdminRequestsPanel from './bds/AdminRequestsPanel'
 import AdminAlerts from './AdminAlerts'
+import { useStaffRole } from './bds/useStaffRole'
 import {
   collection,
   deleteDoc,
@@ -42,7 +43,6 @@ import { useAuth } from './AuthPanel'
 import { EMAILJS_PUBLIC_KEY, EMAILJS_SERVICE_ID } from './siteConfig'
 import AdminMarketplaceManagement from './AdminMarketplaceManagement'
 
-const ADMIN_UID = '5Rt0Jsf9wdQ8eB8BoWINKTdQPve2'
 
 // EmailJS configuration
 const EMAILJS_REPLY_TEMPLATE_ID = 'template_e2pq1x7'
@@ -178,7 +178,9 @@ function downloadCSV(enquiries: Enquiry[]) {
 }
 
 export default function AdminDashboard() {
-  const { user, ready: authReady } = useAuth()
+  const { user, ready: authReadyRaw } = useAuth()
+  const { role: staffRoleName, loading: roleLoading } = useStaffRole()
+  const authReady = authReadyRaw && !roleLoading
 
   const [enquiries, setEnquiries] = useState<Enquiry[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -209,7 +211,7 @@ export default function AdminDashboard() {
   const [reviewReplyMessage, setReviewReplyMessage] = useState('')
   const [savingReviewReply, setSavingReviewReply] = useState(false)
 
-  const isAdmin = user?.uid === ADMIN_UID
+  const isAdmin = staffRoleName === 'admin'
 
   const filteredEnquiries = useMemo(() => {
     const search = enquirySearch.trim().toLowerCase()
