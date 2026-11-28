@@ -1,0 +1,14 @@
+.quick-rate { margin-top: 12px; padding: 14px; border: 1px solid var(--rm-line, rgba(128,128,128,.35)); border-radius: 6px; background: var(--rm-soft, rgba(128,128,128,.08)); display: grid; gap: 10px; }
+.quick-rate p { margin: 0; font-size: 14px; }
+.quick-rate-row { display: flex; gap: 4px; }
+.quick-rate-row button { padding: 4px; border: 0; background: transparent; color: rgba(128,128,128,.7); cursor: pointer; line-height: 0; }
+.quick-rate-row button.on { color: #e0a800; }
+.quick-rate-row button:focus-visible { outline: 2px solid var(--rm-accent-ink, #648b16); border-radius: 4px; }
+.quick-rate textarea { width: 100%; padding: 10px; border: 1px solid var(--rm-line, rgba(128,128,128,.5)); border-radius: 5px; background: var(--rm-paper, transparent); color: inherit; font: inherit; }
+.quick-rate-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.quick-rate-actions button:not(.quick-rate-link) { padding: 10px 16px; border: 0; border-radius: 5px; background: var(--rm-accent, #b7e84b); color: #18210d; font-weight: 800; cursor: pointer; }
+.quick-rate-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.quick-rate-link { border: 0; background: none; color: var(--rm-accent-ink, #648b16); font-weight: 700; cursor: pointer; padding: 0; text-align: left; }
+.quick-rate-stars { color: #e0a800; letter-spacing: 2px; }
+.quick-rate-error { color: #c2410c; font-size: 13px; }
+.quick-rate.done { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
