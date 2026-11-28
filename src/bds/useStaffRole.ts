@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -39,9 +38,14 @@ export function useStaffRole(): { role: StaffRole; level: number; loading: boole
         const snap = await getDoc(doc(db, 'staff', user.uid))
         const data = snap.data()
         const next: StaffRole =
-          snap.exists() && data?.active !== false && (data?.role === 'manager' || data?.role === 'support')
+          snap.exists() &&
+          data?.active !== false &&
+          (data?.role === 'manager' || data?.role === 'support' || data?.role === 'admin')
             ? (data.role as StaffRole)
             : ''
+
+        // A newly added administrator picks up their admin sign-in claim straight away.
+        if (next === 'admin') await user.getIdToken(true)
         if (!cancelled) setRole(next)
       } catch {
         if (!cancelled) setRole('')
