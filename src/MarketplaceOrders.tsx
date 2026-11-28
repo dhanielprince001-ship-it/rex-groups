@@ -16,6 +16,7 @@ import {
 import { useAuth } from './AuthPanel'
 import ThemeToggle from './ThemeToggle'
 import './delivery-confirm.css'
+import './pay-retry.css'
 import DisputeThread from './DisputeThread'
 import QuickRate from './QuickRate'
 
@@ -175,10 +176,11 @@ export default function MarketplaceOrders() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     if (!user) return
 
-    setLoading(true)
+    // A silent refresh keeps the list on screen (no flicker or jumping).
+    if (!silent) setLoading(true)
     setError('')
 
     try {
@@ -227,6 +229,72 @@ export default function MarketplaceOrders() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Coming back from Paystack: re-check a few times while the webhook confirms payment.
+  const [returning] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('payment') === 'return',
+  )
+  const [payingId, setPayingId] = useState('')
+  const [payError, setPayError] = useState<{ id: string; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!returning || !user) return
+
+    let tries = 0
+    const timer = window.setInterval(() => {
+      tries += 1
+      void load(true)
+      if (tries >= 6) window.clearInterval(timer)
+    }, 5000)
+
+    return () => window.clearInterval(timer)
+  }, [returning, user, load])
+
+  // Start (or restart) payment for an unpaid order.
+  async function payNow(orderId: string) {
+    if (!user || payingId) return
+
+    setPayingId(orderId)
+    setPayError(null)
+
+    try {
+      const token = await user.getIdToken()
+
+      const response = await fetch('/api/payments-initialize', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ orderId }),
+      })
+
+      const data = await readJson(response)
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Payment could not be started.',
+        )
+      }
+
+      if (
+        typeof data.authorizationUrl !== 'string' ||
+        !data.authorizationUrl.startsWith('https://checkout.paystack.com/')
+      ) {
+        throw new Error('The payment provider returned an invalid checkout link.')
+      }
+
+      window.location.assign(data.authorizationUrl)
+    } catch (err) {
+      setPayError({
+        id: orderId,
+        text: err instanceof Error ? err.message : 'Payment could not be started.',
+      })
+      setPayingId('')
+    }
+  }
 
   const [actionBusy, setActionBusy] = useState('')
   const [disputeFor, setDisputeFor] = useState('')
@@ -425,6 +493,39 @@ export default function MarketplaceOrders() {
                         Payment: {order.paymentStatus || 'Unpaid'}
                       </span>
                     </div>
+
+                    {order.paymentStatus !== 'Paid' &&
+                      order.status === 'Awaiting Payment' && (
+                        <div className="rex-pay-retry">
+                          {returning && (
+                            <p role="status">
+                              Checking your payment… If you cancelled or it did
+                              not go through, you can pay again below.
+                            </p>
+                          )}
+
+                          <p>
+                            This order has not been paid yet. Pay now to send
+                            it to the seller.
+                          </p>
+
+                          <button
+                            type="button"
+                            disabled={payingId === order.id}
+                            onClick={() => void payNow(order.id)}
+                          >
+                            {payingId === order.id
+                              ? 'Opening secure checkout…'
+                              : `Pay ${money.format(total)} now`}
+                          </button>
+
+                          {payError?.id === order.id && (
+                            <p className="rex-pay-retry-error" role="alert">
+                              {payError.text}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                     <div className="rex-order-total">
                       <div>
