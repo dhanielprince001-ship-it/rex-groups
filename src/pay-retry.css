@@ -1,6 +1,6 @@
-
 .rex-pay-retry { display: grid; gap: 8px; margin: 12px 0; padding: 14px; border: 1px solid var(--rm-accent-ink, #648b16); border-radius: 6px; background: var(--rm-soft, rgba(128,128,128,.08)); }
 .rex-pay-retry p { margin: 0; font-size: 14px; line-height: 1.5; }
 .rex-pay-retry button { justify-self: start; padding: 12px 18px; border: 0; border-radius: 5px; background: var(--rm-accent, #b7e84b); color: #18210d; font-weight: 800; cursor: pointer; }
 .rex-pay-retry button:disabled { opacity: .6; cursor: not-allowed; }
 .rex-pay-retry-error { color: #c2410c; font-weight: 600; }
+.rex-pay-retry .rex-pay-retry-cancel { background: transparent; color: inherit; border: 1px solid var(--rm-line, rgba(128,128,128,.5)); font-weight: 700; }
