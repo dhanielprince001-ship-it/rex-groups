@@ -51,6 +51,51 @@ function oneOf(value: unknown, list: string[], label: string): string {
   return value
 }
 
+// Attachments are images uploaded straight to Cloudinary (signed, per-client folder).
+function cleanAttachments(value: unknown, uid: string) {
+  if (value === undefined || value === null) return []
+
+  if (!Array.isArray(value) || value.length > 5) {
+    throw new HttpError(400, 'You can attach up to 5 images.')
+  }
+
+  if (value.length === 0) return []
+
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME
+
+  if (!cloud) throw new HttpError(500, 'File uploads are not configured yet.')
+
+  const prefix = `https://res.cloudinary.com/${cloud}/image/upload/`
+
+  return value.map((item) => {
+    const a = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+    const url = typeof a.url === 'string' ? a.url : ''
+    const publicId = typeof a.publicId === 'string' ? a.publicId : ''
+    const size = Number(a.size)
+
+    if (!url.startsWith(prefix) || url.length > 500 || /\s/.test(url)) {
+      throw new HttpError(400, 'One of the attachments is not valid.')
+    }
+
+    if (
+      !publicId.startsWith(`rexgroups/bds/${uid}/`) ||
+      publicId.length > 200 ||
+      publicId.includes('..') ||
+      !url.includes(publicId)
+    ) {
+      throw new HttpError(400, 'One of the attachments is not valid.')
+    }
+
+    if (!Number.isFinite(size) || size < 0 || size > 10 * 1024 * 1024) {
+      throw new HttpError(400, 'An attachment is too large.')
+    }
+
+    const name = typeof a.name === 'string' ? a.name.trim().slice(0, 120) : ''
+
+    return { url, publicId, name: name || 'image', size: Math.round(size) }
+  })
+}
+
 function isAdminToken(uid: string) {
   return uid === ADMIN_UID
 }
@@ -150,6 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         budget: oneOf(body.budget, BUDGETS, 'budget'),
         timeline: oneOf(body.timeline, TIMELINES, 'timeline'),
         contactMethod: oneOf(body.contactMethod, CONTACTS, 'contact method'),
+        attachments: cleanAttachments(body.attachments, uid),
         status: 'Submitted',
         progress: 0,
         assignee: '',
