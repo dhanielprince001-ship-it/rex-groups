@@ -126,10 +126,18 @@ export default async function handler(
 
       const previousData = previous.data()
 
+      // Reuse an unfinished checkout link only while it is still fresh;
+      // after that, start a new one so a stale or failed link is never reused.
+      const createdMs =
+        typeof previousData?.createdAt?.toMillis === 'function'
+          ? previousData.createdAt.toMillis()
+          : 0
+
       if (
         previous.exists &&
         previousData?.status === 'Initialized' &&
-        typeof previousData.authorizationUrl === 'string'
+        typeof previousData.authorizationUrl === 'string' &&
+        Date.now() - createdMs < 30 * 60 * 1000
       ) {
         return res.status(200).json({
           success: true,
