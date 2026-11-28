@@ -2,12 +2,19 @@ import type { User } from 'firebase/auth'
 import type { BdsAttachment } from './types'
 
 export const MAX_ATTACHMENTS = 5
-export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
-const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+export const MAX_PDF_BYTES = 10 * 1024 * 1024
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
 export function checkAttachment(file: File): string | null {
-  if (!ALLOWED.includes(file.type)) return `${file.name}: use a JPG, PNG or WEBP image.`
-  if (file.size > MAX_ATTACHMENT_BYTES) return `${file.name}: images must be 5MB or smaller.`
+  if (!ALLOWED.includes(file.type)) return `${file.name}: use a JPG, PNG, WEBP image or a PDF.`
+
+  const isPdf = file.type === 'application/pdf'
+
+  if (file.size > (isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES)) {
+    return `${file.name}: ${isPdf ? 'PDFs must be 10MB or smaller.' : 'images must be 5MB or smaller.'}`
+  }
+
   return null
 }
 
@@ -56,5 +63,11 @@ export async function uploadAttachment(user: User, file: File): Promise<BdsAttac
     throw new Error(data.error?.message || `${file.name} could not be uploaded.`)
   }
 
-  return { url: data.secure_url, publicId: data.public_id, name: file.name.slice(0, 120), size: file.size }
+  return {
+    url: data.secure_url,
+    publicId: data.public_id,
+    name: file.name.slice(0, 120),
+    size: file.size,
+    kind: file.type === 'application/pdf' ? 'pdf' : 'image',
+  }
 }
