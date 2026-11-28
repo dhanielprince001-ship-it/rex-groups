@@ -56,7 +56,7 @@ function cleanAttachments(value: unknown, uid: string) {
   if (value === undefined || value === null) return []
 
   if (!Array.isArray(value) || value.length > 5) {
-    throw new HttpError(400, 'You can attach up to 5 images.')
+    throw new HttpError(400, 'You can attach up to 5 files.')
   }
 
   if (value.length === 0) return []
@@ -91,8 +91,9 @@ function cleanAttachments(value: unknown, uid: string) {
     }
 
     const name = typeof a.name === 'string' ? a.name.trim().slice(0, 120) : ''
+    const kind = /\.pdf$/i.test(url) ? 'pdf' : 'image'
 
-    return { url, publicId, name: name || 'image', size: Math.round(size) }
+    return { url, publicId, name: name || kind, size: Math.round(size), kind }
   })
 }
 
