@@ -7,6 +7,7 @@ import HomePage from './HomePage'
 import BusinessDigitalSolutionsPage from './BusinessDigitalSolutionsPage'
 import ClientDashboard from './ClientDashboard'
 import ErrorBoundary from './ErrorBoundary'
+import MarketplaceProduct from './MarketplaceProduct'
 import AdminBdsDashboard from './AdminBdsDashboard'
 import MarketplacePage from './MarketplacePage'
 import MarketplaceHome from './MarketplaceHome'
@@ -17,7 +18,6 @@ import MarketplaceOrders from './MarketplaceOrders'
 import TrackOrderButton from './TrackOrderButton'
 import { CartProvider } from './CartContext'
 import { ThemeProvider } from './ThemeContext'
-import ThemeToggle from './ThemeToggle'
 
 const BASE_TITLE = 'Rex Groups'
 
@@ -130,53 +130,6 @@ function NotFound() {
   )
 }
 
-function MarketplacePlaceholder({
-  title,
-}: {
-  title: string
-}) {
-  return (
-    <main className="rex-marketplace rex-marketplace-placeholder">
-      <header className="rex-market-header">
-        <Link className="rex-market-brand" to="/marketplace">
-          <span className="rex-market-brand-mark">
-            R<span>.</span>
-          </span>
-
-          <span>
-            REX <b>MARKETPLACE</b>
-          </span>
-        </Link>
-
-        <Link to="/marketplace">
-          Back to marketplace
-        </Link>
-
-        <ThemeToggle />
-      </header>
-
-      <section className="rex-market-placeholder-content">
-        <span className="rex-market-eyebrow">
-          REX GROUPS MARKETPLACE
-        </span>
-
-        <h1>{title}</h1>
-
-        <p>
-          This page is the next part of the marketplace build.
-        </p>
-
-        <Link
-          className="rex-market-primary-link"
-          to="/marketplace"
-        >
-          Explore marketplace
-        </Link>
-      </section>
-    </main>
-  )
-}
-
 // Resets the error screen whenever the visitor navigates to another page.
 function RouteBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
@@ -267,7 +220,7 @@ export default function App() {
             path="/marketplace/product/:productId"
             element={
               <MarketplaceRoute>
-                <MarketplacePlaceholder title="Product page coming next." />
+                <MarketplaceProduct />
               </MarketplaceRoute>
             }
           />
