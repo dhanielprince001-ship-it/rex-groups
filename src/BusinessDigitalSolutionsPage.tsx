@@ -8,11 +8,13 @@ import { useAuth } from './AuthPanel'
 import { EMAIL, PHONE_DISPLAY, WHATSAPP } from './siteConfig'
 import { BENEFITS, FAQS, PROCESS, SERVICES } from './bds/catalog'
 import ServiceRequestForm from './bds/ServiceRequestForm'
-import { ADMIN_UID, type BdsServiceOverride, type ServiceId } from './bds/types'
+import { type BdsServiceOverride, type ServiceId } from './bds/types'
+import { useStaffRole } from './bds/useStaffRole'
 import './bds.css'
 
 export default function BusinessDigitalSolutionsPage() {
   const { user } = useAuth()
+  const { level } = useStaffRole()
   const [overrides, setOverrides] = useState<Record<string, BdsServiceOverride>>({})
   const [selected, setSelected] = useState<ServiceId>('automation')
   const [preselect, setPreselect] = useState<ServiceId | null>(null)
@@ -62,7 +64,7 @@ export default function BusinessDigitalSolutionsPage() {
               <a className="button bds-ghost" href="#consultation">Book a consultation</a>
               <Link className="text-link" to="/business-digital-solutions/dashboard">{user ? 'My dashboard' : 'Client login'}</Link>
             </div>
-            {user?.uid === ADMIN_UID && <Link className="text-link" to="/business-digital-solutions/admin">Open admin dashboard</Link>}
+            {level >= 1 && <Link className="text-link" to="/business-digital-solutions/admin">Open staff dashboard</Link>}
           </div>
         </div>
       </section>
