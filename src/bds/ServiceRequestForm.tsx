@@ -50,7 +50,7 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
 
       if (problem) return setError(problem)
 
-      if (next.length >= MAX_ATTACHMENTS) return setError(`You can attach up to ${MAX_ATTACHMENTS} images.`)
+      if (next.length >= MAX_ATTACHMENTS) return setError(`You can attach up to ${MAX_ATTACHMENTS} files.`)
 
       next.push(file)
     }
@@ -80,7 +80,7 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
       const attachments = []
 
       for (let index = 0; index < files.length; index++) {
-        setProgress(`Uploading image ${index + 1} of ${files.length}…`)
+        setProgress(`Uploading file ${index + 1} of ${files.length}…`)
         attachments.push(await uploadAttachment(user, files[index]))
       }
 
@@ -169,10 +169,10 @@ export default function ServiceRequestForm({ preselect, activeIds, onSubmitted }
       </div>
 
       <div className="bds-files">
-        <label>Attach images (optional, up to {MAX_ATTACHMENTS}, JPG/PNG/WEBP, 5MB each)
+        <label>Attach files (optional, up to {MAX_ATTACHMENTS}: JPG, PNG, WEBP up to 5MB, or PDF up to 10MB)
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
             multiple
             disabled={busy}
             onChange={(e) => {
