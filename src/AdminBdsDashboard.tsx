@@ -8,6 +8,7 @@ import { useAuth } from './AuthPanel'
 import { bdsApi } from './bds/api'
 import { SERVICES } from './bds/catalog'
 import AdminQuotePanel from './bds/AdminQuotePanel'
+import AttachmentList from './bds/AttachmentList'
 import { BarChart, BarLegend, LineChart } from './bds/charts'
 import {
   ADMIN_UID, STATUSES, fmtDate, fmtDateTime, naira, statusClass, toDate,
@@ -187,6 +188,8 @@ function AdminDetail({ request }: { request: BdsRequest }) {
         <input value={assignee} onChange={(e) => setAssignee(e.target.value)} maxLength={80} placeholder="Assign to (team member)" aria-label="Assignee" />
         <button className="button bds-ghost" disabled={!!busy} onClick={() => void run('assign', 'assign', { assignee }, 'Assignment saved.')}>Save</button>
       </div>
+
+      <AttachmentList items={request.attachments} />
 
       <AdminQuotePanel request={request} user={user} />
 
